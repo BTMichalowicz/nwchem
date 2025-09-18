@@ -13,7 +13,7 @@ arch=`uname -m`
 env | grep FC || true
 env | grep CC || true
 if test -f "/usr/lib/os-release"; then
-    dist=$(grep ID= /etc/os-release |head -1 |cut -c4-| sed 's/\"//g')
+    dist=$(grep ID= /etc/os-release |grep -v VERSION |head -1 |cut -c4-| sed 's/\"//g')
 fi
 if test -f "/usr/lib/fedora-release"; then
     dist="fedora"
@@ -177,6 +177,12 @@ if [[ "$os" == "Linux" ]]; then
 	which mpif90
 	mpif90 -show
     else
+       #fix for MPICH on ubuntu 24.04
+	if [[ "$MPI_IMPL" == "mpich" ]] && [[ "$DISTR" == "ubuntu" ]]; then
+	    ubuntu_v=$(grep VERSION_ID /etc/os-release|cut -d = -f 2 | sed 's/\"//g' )
+	    if [ $ubuntu_v = "24.04" ]; then export MPI_IMPL="build_mpich"; export BUILD_MPICH=1 ; fi
+	fi
+
 	if [[ "$MPI_IMPL" == "openmpi" ]]; then
 	    mpi_bin="openmpi-bin" ; mpi_libdev="libopenmpi-dev" scalapack_libdev="libscalapack-openmpi-dev"
 	fi
@@ -191,7 +197,7 @@ if [[ "$os" == "Linux" ]]; then
 	    $MYSUDO apt-get update
 
 	    if [[ "$MPI_IMPL" == "intel" ]]; then
-		mpi_bin="  " ; mpi_libdev=" " scalapack_libdev=" "
+		mpi_bin="intel-oneapi-mpi" ; mpi_libdev="intel-oneapi-mpi-devel" scalapack_libdev=" "
 	    fi
 	fi
 	if [[ "$GITHUB_WORKFLOW" != "NWChem_CI_selfhosted" ]]; then
@@ -227,12 +233,12 @@ if [[ "$os" == "Linux" ]]; then
 	    export I_MPI_F90="$FC"
 	    "$FC" -V ; if [[ $? != 0 ]]; then echo "Intel SW install failed"; exit 1; fi
 	    icx -V
-	    sudo rm -rf $MKLROOT/lib/*sycl* || true
+	    $MYSUDO rm -rf $MKLROOT/lib/*sycl* || true
 	fi
-	if [[ "$FC" == 'flang-new-'* ]]; then
+	if [[ "$FC" == 'flang-new-'* || "$FC" == 'flang-'?? ]]; then
 	    wget https://apt.llvm.org/llvm.sh
 	    chmod +x llvm.sh
-	    llvm_ver=$(echo $FC | cut -d - -f 3)
+	    llvm_ver=$(echo "${FC##*-}")
 	    $MYSUDO ./llvm.sh $llvm_ver
 	    $MYSUDO apt-get install -y flang-$llvm_ver
 	fi
@@ -267,7 +273,7 @@ if [[ "$os" == "Linux" ]]; then
 	fi
 	if [[ "$FC" == "amdflang" ]]; then
 	    $MYSUDO apt-get install -y wget gnupg2 coreutils dialog tzdata
-	    rocm_version=5.6.1
+	    rocm_version=6.2.4
 	    tries=0 ; until [ "$tries" -ge 10 ] ; do \
 	    wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key |  $MYSUDO apt-key add - \
 		&& break ; \
@@ -284,13 +290,13 @@ if [[ "$os" == "Linux" ]]; then
 	fi
 	if [[ "$FC" == "nvfortran" ]]; then
 	    $MYSUDO apt-get -y install lmod g++ libtinfo5 libncursesw5 lua-posix lua-filesystem lua-lpeg lua-luaossl
-	    nv_major=23
-	    nv_minor=7
+	    nv_major=24
+	    nv_minor=11
 	    nverdot="$nv_major"."$nv_minor"
 	    nverdash="$nv_major"-"$nv_minor"
 	    arch_dpkg=`dpkg --print-architecture`
-	    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/DEB-GPG-KEY-NVIDIA-HPC-SDK | sudo gpg --yes --dearmor -o /usr/share/keyrings/nvidia-hpcsdk-archive-keyring.gpg
-            echo 'deb [signed-by=/usr/share/keyrings/nvidia-hpcsdk-archive-keyring.gpg] https://developer.download.nvidia.com/hpc-sdk/ubuntu/'$arch_dpkg' /' | sudo tee /etc/apt/sources.list.d/nvhpc.list
+	    curl https://developer.download.nvidia.com/hpc-sdk/ubuntu/DEB-GPG-KEY-NVIDIA-HPC-SDK | $MYSUDO gpg --yes --dearmor -o /usr/share/keyrings/nvidia-hpcsdk-archive-keyring.gpg
+            echo 'deb [signed-by=/usr/share/keyrings/nvidia-hpcsdk-archive-keyring.gpg] https://developer.download.nvidia.com/hpc-sdk/ubuntu/'$arch_dpkg' /' | $MYSUDO tee /etc/apt/sources.list.d/nvhpc.list
 	    echo '*** added hpc-sdk source to /etc/aps ***'
 	    ls -lrt /etc/apt/sources.list.d/ || true
 	    ls -lrt	/etc/apt/sources.list.d/nvhpc.list || true
@@ -308,6 +314,8 @@ if [[ "$os" == "Linux" ]]; then
 	    $MYSUDO rm -rf /opt/nvidia/hpc_sdk/Linux_"$arch"/"$nverdot"/profilers
 	    $MYSUDO rm -rf /opt/nvidia/hpc_sdk/Linux_"$arch"/"$nverdot"/comm_libs
 	    $MYSUDO rm -rf /opt/nvidia/hpc_sdk/Linux_"$arch"/"$nverdot"/math_libs
+	    $MYSUDO ln -sf /opt/nvidia/hpc_sdk/Linux_"$arch"/"$nverdot" /opt/nvidia/hpc_sdk/Linux_"$arch"/latest
+	    ls -lrt /opt/nvidia/hpc_sdk/Linux_"$arch"/latest/
 	    export FC=nvfortran
 	    export CC=gcc
 	    nvfortran -V ;if [[ $? != 0 ]]; then echo "nvfortran install failed"; exit 1; fi
@@ -315,14 +323,16 @@ if [[ "$os" == "Linux" ]]; then
 	fi
     fi
     # check for mpif90 command and exit if not present
+    if [[ "$MPI_IMPL" != "build_mpich" ]]; then
     if [[ ! $(command -v mpif90) ]]; then echo "mpif90 not present"; exit 1; fi
     echo "mpif90 -show output is " `mpif90 -show` || true
     echo "which mpif90 output is " `which mpif90` ||  true
+    fi
 # try to use ubuntu flaky GA pkg 
     if [[ "$ARMCI_NETWORK" == "GA_DEBIAN" ]]; then
 	$MYSUDO apt-get install -y libglobalarrays-dev libarmci-mpi-dev
-	# hack
-	$MYSUDO ln -sf /usr/lib/x86_64-linux-gnu/libarmci.a /usr/lib/x86_64-linux-gnu/libarmci-openmpi.a
+#	# hack
+#	$MYSUDO ln -sf /usr/lib/x86_64-linux-gnu/libarmci.a /usr/lib/x86_64-linux-gnu/libarmci-openmpi.a
 #    export EXTERNAL_GA_PATH=/usr/lib/x86_64-linux-gnu/ga/openmpi
 #	export EXTERNAL_GA_PATH=/usr
 #	export EXTERNAL_ARMCI_PATH=/usr
