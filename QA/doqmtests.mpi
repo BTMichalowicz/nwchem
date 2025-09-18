@@ -350,6 +350,8 @@ let "myexit+=$?"
 let "myexit+=$?"
 ./runtests.mpi.unix procs $np localize-pm-allyl
 let "myexit+=$?"
+./runtests.mpi.unix procs $np localize-pm-aa
+let "myexit+=$?"
 #
 #--- range-separated functionals tests
 ./runtests.mpi.unix procs $np acr-camb3lyp-cdfit
@@ -648,6 +650,8 @@ let "myexit+=$?"
 # superheavy elements check
 ./runtests.mpi.unix procs $np dft_tennessine
 let "myexit+=$?"
+./runtests.mpi.unix procs $np ecp_freq
+let "myexit+=$?"
 #
 ./runtests.mpi.unix procs $np ccsdt_ompt_w3pvdz
 let "myexit+=$?"
@@ -727,6 +731,12 @@ let "myexit+=$?"
 ./runtests.mpi.unix procs $np H2COWat_VEMExc_CISHF
 let "myexit+=$?"
 ./runtests.mpi.unix procs $np p2ta-vem
+let "myexit+=$?"
+./runtests.mpi.unix procs $np bsse_sodft
+let "myexit+=$?"
+./runtests.mpi.unix procs $np dft_nio_r2scan
+let "myexit+=$?"
+./runtests.mpi.unix procs $np  cosmo_h2cco2_opt
 let "myexit+=$?"
 if [[ "$what" != "flaky" ]]; then
     echo
