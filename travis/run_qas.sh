@@ -41,7 +41,7 @@ fi
 env|egrep MP
  do_largeqas=1
 
- if [[ "$EXTRA_BUILD" == "1" ]] || [[ ! -z "$USE_SIMINT" ]] || [[ "$arch" == "aarch64" ]] || [[ "$arch" == "ppc64le" ]] || [[ "$arch" == "riscv64" ]]; then
+ if [[ "$CACHE_HIT" == "N" ]] || [[ "$EXTRA_BUILD" == "1" ]] || [[ ! -z "$USE_SIMINT" ]] || [[ "$arch" == "aarch64" ]] || [[ "$arch" == "ppc64le" ]] || [[ "$arch" == "riscv64" ]]; then
      do_largeqas=0
  fi
 
@@ -92,6 +92,10 @@ env|egrep MP
 if [[ "$MPI_IMPL" == "openmpi" ]]; then
 export MPIRUN_NPOPT=" --allow-run-as-root -mca mpi_yield_when_idle 0 --oversubscribe -np "
 fi
+if [[ "$MPI_IMPL" == "intel" ]]; then
+#to avoid segfault with FI_PROVIDER=shm in MPI_Finalize with Intel MPI 2021.15
+export FI_PROVIDER=tcp
+fi
 if [[ -d "$TRAVIS_BUILD_DIR/.cachedir/files/libraries" ]]; then
  echo === ls binaries cache ===
  ls -lrt $TRAVIS_BUILD_DIR/.cachedir/binaries/$NWCHEM_TARGET/ || true
@@ -120,7 +124,9 @@ fi
 	 fi
 	 if [[ ! $(grep -i cosmo $TRAVIS_BUILD_DIR/src/stubs.F| awk '/cosmo_input/') ]]; then
 	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs cosmo_h2o_dft
-	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs tddftvem_ch4_opt
+	     if  [[ "$do_largeqas" == 1 ]]; then
+		 cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs cosmo_h2cco2_opt
+	     fi
 	 fi
          if [[ ! $(grep -i gw $TRAVIS_BUILD_DIR/src/stubs.F| awk '/gw_input/') ]]; then
   	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs ritddft_h2o ritddft_co
@@ -165,6 +171,7 @@ fi
 	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs x2c-h2se
 	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs dftd3_c6cn
 	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs xe-zora-mp-so
+	     cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs oniom2
 	   if [[ ! -z "$USE_LIBXC" ]] || [[ ! -z "$LIBXC_INCLUDE" ]]; then
 	       cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs libxc_he2+
 	       cd $TRAVIS_BUILD_DIR/QA && ./runtests.mpi.unix procs $nprocs libxc_scanl

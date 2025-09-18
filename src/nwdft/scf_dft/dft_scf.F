@@ -258,6 +258,8 @@ c     == initialize DIIS call counter ==
       icall(2) = 0
 c
       gcds = 0.d0
+      egas = 0d0
+      esol = 0d0
       do_cosmo_vem = 0
       istep_cosmo_vem = 0
       do_cosmo_smd = .false.
@@ -1197,8 +1199,8 @@ c
         cosmo_file = 'cosmo.xyz'
         if (ipol.eq.2) ! separate components
      &    call ga_dadd(1.d0,g_dens(1),-1.d0,g_dens(2),g_dens(1))
-        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, 
-     &          ecosmo, odbug, ipol, g_dens, cosmo_file)
+        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, ecosmo,
+     &          egas, etnew+enuc, odbug, ipol, g_dens, cosmo_file)
         if (ipol.eq.2) ! reinstate total
      &    call ga_dadd(one, g_dens(1), one, g_dens(2), g_dens(1))
       end if ! cosmo check
@@ -2191,8 +2193,8 @@ c
         cosmo_file = 'cosmo.xyz'
         if(ipol.eq.2)  ! separate components
      &    call ga_dadd(1.d0,g_dens(1),-1.d0,g_dens(2),g_dens(1))
-        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom,
-     &          ecosmo, odbug, ipol, g_dens, cosmo_file)
+        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, ecosmo,
+     &          egas, esol, odbug, ipol, g_dens, cosmo_file)
         if (ipol.eq.2) ! reinstate total in g_dens(1)
      &    call ga_dadd(one, g_dens(1), one, g_dens(2), g_dens(1))
       end if ! cosmo_esp
