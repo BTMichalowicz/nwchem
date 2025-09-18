@@ -3,7 +3,7 @@ source ../libext_utils/get_tgz.sh
 rm -rf mpich  mpich-?.?.?
 #VERSION=3.4.2
 #VERSION=4.0.2
-VERSION=4.2.2
+VERSION=4.3.0
 #curl -L http://www.mpich.org/static/downloads/${VERSION}/mpich-${VERSION}.tar.gz -o mpich.tgz
 #curl -L https://github.com/pmodels/mpich/releases/download/v${VERSION}/mpich-${VERSION}.tar.gz -o mpich.tgz
 get_tgz https://github.com/pmodels/mpich/releases/download/v${VERSION}/mpich-${VERSION}.tar.gz  mpich.tgz
@@ -52,7 +52,17 @@ if [ -x "$(command -v xx-info)" ]; then
     fi
 fi
 echo SHARED_FLAGS is $SHARED_FLAGS
-./configure --prefix=`pwd`/../.. --enable-fortran=all $SHARED_FLAGS  --disable-cxx --enable-romio --disable-cuda --disable-opencl --enable-silent-rules  --enable-fortran=all
+if [ $(uname -s) == "Darwin" ]; then
+    if pkg-config hwloc --exists; then
+	HWLOC_FLAGS=" --with-hwloc=$(pkg-config hwloc  --variable=prefix) "
+    fi
+fi
+echo HWLOC_FLAGS is $HWLOC_FLAGS
+./configure --prefix=`pwd`/../.. --enable-fortran=all $SHARED_FLAGS  --disable-cxx --disable-romio  --enable-silent-rules  --enable-fortran=all \
+	    --without-slurm  --with-pm=hydra \
+	    --without-cuda --without-ze --without-hip --without-hcoll \
+	    --with-device=ch3 \
+	    $HWLOC_FLAGS
 #./configure --prefix=`pwd`/../.. --enable-fortran=all $SHARED_FLAGS  --disable-cxx --enable-romio --with-pm=gforker --with-device=ch3:nemesis --disable-cuda --disable-opencl --enable-silent-rules  --enable-fortran=all
 if [[ "$?" != "0" ]]; then
     cat config.log
@@ -74,3 +84,8 @@ if [[ "$?" != "0" ]]; then
 fi
 
 make install >& mpich_install.log
+which mpif90
+mpif90 -show
+rm -f ${NWCHEM_TOP}/src/libmpi.txt
+${NWCHEM_TOP}/src/tools/guess-mpidefs --libmpi
+PATH=${NWCHEM_TOP}/src/libext/bin:$PATH ${NWCHEM_TOP}/src/tools/check_libmpi.sh ${NWCHEM_TOP}
