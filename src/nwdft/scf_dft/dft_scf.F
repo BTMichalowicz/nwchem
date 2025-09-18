@@ -258,6 +258,8 @@ c     == initialize DIIS call counter ==
       icall(2) = 0
 c
       gcds = 0.d0
+      egas = 0d0
+      esol = 0d0
       do_cosmo_vem = 0
       istep_cosmo_vem = 0
       do_cosmo_smd = .false.
@@ -297,7 +299,6 @@ c
       call ecce_print_module_entry('dft')
       dft_scf = .false.
       ocosmo_got_gasphase = .false.
-      lmaxov_sv = lmaxov
       oprint = util_print('information', print_low)
       oprint_info = util_print('common', print_debug)
       oprint_parm = util_print('parameters', print_default)
@@ -690,26 +691,13 @@ c     == get info for int2e_ and set sleazy tolerance ==
 c
 c     == force sleazy SCF into "direct" mode ==
       call fock_force_direct(rtdb)
-c
-c     -------------------------------------------
-c     calculate superposition of atomic densities
-c     if ZORA or X2C functionality is requested
-c     -------------------------------------------
 
-      if ((do_zora .or. do_x2c) .and. .not.x2c_noatm()) then
-        call ga_zero(g_dens_at(1))
-        if (ipol.gt.1) call ga_zero(g_dens_at(2))
-        call guess_dens(rtdb, geom, ao_bas_han, g_dens_at)
-        call dft_quickguess(ipol,nbf_ao,g_dens_at,oskel,
-     N     ntotel,nclosed,
-     D     .false.)
-      else if (do_x2c .and. x2c_noatm()) then
-        call ga_zero(g_dens_at(1))
-        if (ipol.gt.1) call ga_zero(g_dens_at(2)) 
-      end if                    ! do_zora .or. do_x2c
+      call x2czora_atguess(rtdb,geom,ao_bas_han,
+     i     ipol, nbf_ao, oskel, ntotel, nclosed,
+     d     do_zora, do_x2c,
+     g     g_dens_at)
 c
 c     == get atomic zora contributions ==
-      if (.not.rtdb_get(rtdb,'zora',mt_log,1,do_zora)) do_zora = .false.
 c
       if (do_zora) then
         if (me.eq.0) then
@@ -880,6 +868,19 @@ c     no movecs available, use svecs
       endif
       if(staticguess) llldb_out=util_statldb(llldb,rtdb)
       call dft_guessout(nmo,nbf_ao,g_gmovecs,g_movecs,ipol)
+      if (.not.rtdb_get(rtdb, 'dft:imom', mt_log, 1,
+     &     lmaxov_imom)) lmaxov_imom=.false.
+      if (lmaxov_imom) then
+c     store g_movecs for max_ovl as g_movecs0
+         if(.not.ga_duplicate(g_movecs(1),g_movecs0(1),'movecs0'))
+     &        call errquit('dft_scf: ga_duplicate failed',0, GA_ERR)
+         call ga_copy(g_movecs(1),g_movecs0(1))
+         if(ipol.gt.1)  then
+            if(.not.ga_duplicate(g_movecs(2),g_movecs0(2),'movecs0'))
+     &           call errquit('dft_scf: ga_duplicate failed',2,GA_ERR)
+            call ga_copy(g_movecs(2),g_movecs0(2))
+         endif
+      endif
       if (me.eq.0.and.oprint)
      &     write(LuOut,'(2x," Time after variat. SCF: ",f8.1)')
      &     util_wallsec()
@@ -1198,8 +1199,8 @@ c
         cosmo_file = 'cosmo.xyz'
         if (ipol.eq.2) ! separate components
      &    call ga_dadd(1.d0,g_dens(1),-1.d0,g_dens(2),g_dens(1))
-        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, 
-     &          ecosmo, odbug, ipol, g_dens, cosmo_file)
+        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, ecosmo,
+     &          egas, etnew+enuc, odbug, ipol, g_dens, cosmo_file)
         if (ipol.eq.2) ! reinstate total
      &    call ga_dadd(one, g_dens(1), one, g_dens(2), g_dens(1))
       end if ! cosmo check
@@ -1476,9 +1477,13 @@ cc AJL/End
             endif
            enddo
          endif
+         if (.not.lmaxov_imom) then
+            g_movecs0(ispin)=g_movecs(ispin)
+         endif
          call dft_diagn(levelshifting,
      ,        nmo(ispin),ncanorg,
      .        g_focks(ispin),g_s,g_movecs(ispin),g_tmp,g_svecs,
+     .        g_movecs0(ispin),
      ,        dbl_mb(k_eval(ispin)),svals,noc(ispin),
      ,        homo,lumo,toll_s,
      ,        oprint_intermediate_fock,oprint_time,
@@ -2188,8 +2193,8 @@ c
         cosmo_file = 'cosmo.xyz'
         if(ipol.eq.2)  ! separate components
      &    call ga_dadd(1.d0,g_dens(1),-1.d0,g_dens(2),g_dens(1))
-        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom,
-     &          ecosmo, odbug, ipol, g_dens, cosmo_file)
+        call cosmo_charges_from_dmat(rtdb, ao_bas_han, geom, ecosmo,
+     &          egas, esol, odbug, ipol, g_dens, cosmo_file)
         if (ipol.eq.2) ! reinstate total in g_dens(1)
      &    call ga_dadd(one, g_dens(1), one, g_dens(2), g_dens(1))
       end if ! cosmo_esp
@@ -2534,7 +2539,15 @@ C
      &        ('dft_scf: could not destroy g_focks1', 0, GA_ERR)
       if (ipol.gt.1) then
          if (.not. ga_destroy(g_focks(2))) call errquit
-     &           ('dft_scf: could not destroy g_focks2', 0, GA_ERR)
+     &        ('dft_scf: could not destroy g_focks2', 0, GA_ERR)
+      if (lmaxov_imom) then
+         if (.not. ga_destroy(g_movecs0(1))) call errquit
+     &        ('dft_scf: could not destroy g_movecs01', 0, GA_ERR)
+         if (ipol.gt.1) then
+            if (.not. ga_destroy(g_movecs0(2))) call errquit
+     &           ('dft_scf: could not destroy g_movecs02', 0, GA_ERR)
+         endif
+      endif
       end if
 c
 c     == if frozen embedding ==
