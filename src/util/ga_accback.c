@@ -40,14 +40,17 @@
 			     
 /*\ PROVIDE ACCESS TO A PATCH OF A GLOBAL ARRAY WITH CALLBACK AND RELEASE
 \*/
-void ga_access_callback_release_(g_a, ilo, ihi, jlo, jhi, 
-				 callback, 
-				 arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-     Integer *g_a, *ilo, *ihi, *jlo, *jhi;
-     Integer (*callback)(Integer *,Integer *,Integer *,Integer *,Integer *,
-			 void *, Integer*, 
-			 void *, void *, void *, void *, void *, void *, void *);
-     void *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7;
+void ga_access_callback_release_(Integer *g_a, Integer *ilo, Integer *ihi,
+                                 Integer *jlo, Integer *jhi,
+                                 Integer (*callback)(Integer *, Integer *,
+                                                     Integer *, Integer *,
+                                                     Integer *, void *,
+                                                     Integer *, void *, void *,
+                                                     void *, void *, void *,
+                                                     void *, void *),
+                                 void *arg1, void *arg2, void *arg3,
+                                 void *arg4, void *arg5, void *arg6,
+                                 void *arg7)
 {
   Integer ndim=GA_Ndim(*g_a), lo[2], hi[2], ld[2],
           result; /* Fortran variables */
@@ -75,14 +78,15 @@ void ga_access_callback_release_(g_a, ilo, ihi, jlo, jhi,
   }
 } 
 
-void nga_access_callback_release_(g_a, ilo, ihi,
-				     callback, 
-				     arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-     Integer *g_a, ilo[], ihi[];
-     Integer (*callback)(Integer *,Integer *,Integer *,
-			 void *, Integer*, 
-			 void *, void *, void *, void *, void *, void *, void *);
-     void *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7;
+void nga_access_callback_release_(Integer *g_a, Integer ilo[], Integer ihi[],
+                                  Integer (*callback)(Integer *, Integer *,
+                                                      Integer *, void *,
+                                                      Integer *, void *, void *,
+                                                      void *, void *, void *,
+                                                      void *, void *),
+                                  void *arg1, void *arg2, void *arg3,
+                                  void *arg4, void *arg5, void *arg6,
+                                  void *arg7)
 {
   Integer ndim=GA_Ndim(*g_a), ild[GA_MAX_DIM],
           result; /* Fortran variables */

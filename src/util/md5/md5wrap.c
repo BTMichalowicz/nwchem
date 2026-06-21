@@ -4,6 +4,16 @@
 #include "md5.h"
 #include "typesf2c.h"
 
+#ifndef FATR
+#define FATR
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define CHECKSUM_MAYBE_UNUSED __attribute__((unused))
+#else
+#define CHECKSUM_MAYBE_UNUSED
+#endif
+
 /*
  $Id$
  */
@@ -58,7 +68,7 @@ for portable conversion of lengths into bytes.
 
 void checksum_update(int len, const void *buf)
 {
-    MD5Update(&context, buf, (unsigned int) len);
+    MD5Update(&context, (const unsigned char *)buf, (unsigned int) len);
 }
 
 static void checksum_sum_to_string(const unsigned char sum[16], char csum[33])
@@ -106,7 +116,8 @@ void checksum_simple(int len, const void *buf, char csum[33])
 }
 
 /* Don't need this routine ? */
-static void checksum_string_to_sum(const char csum[33], unsigned char sum[16])
+static void CHECKSUM_MAYBE_UNUSED checksum_string_to_sum(const char csum[33],
+                                                        unsigned char sum[16])
 {
     int i, j;
     char buf[3];
