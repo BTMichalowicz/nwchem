@@ -144,7 +144,8 @@ if [ $NPROC -gt 0 ]; then
 fi
 # Run the tests one at a time
 
- SCRATCHDIR=${CURDIR}/scratchdir
+ SCRATCHROOT=${CURDIR}/scratchdir
+ RUN_SCRATCHROOT=${SCRATCHROOT}/run.$$
  TESTOUTPUTS=${CURDIR}/testoutputs
 
 if [ ! -d $TESTOUTPUTS ]; then
@@ -156,13 +157,25 @@ if [ ! -d $TESTOUTPUTS ]; then
   fi
 fi
 
+ /bin/rm -rf "${RUN_SCRATCHROOT}"
+ mkdir -p "${RUN_SCRATCHROOT}"
+ status=$?
+ if [ $status -ne 0 ]; then
+   echo failed: cannot make directory "${RUN_SCRATCHROOT}"
+   exit 1
+ fi
+
  let overall_status=0
+ let test_index=0
 for TEST_in in "${args_2_use[@]}"
 do
+  let test_index++
   cd $CURDIR
    TEST=tests/${TEST_in}
    TESTDIR=${TEST}
    STUB=`basename ${TEST}`
+   SAFE_STUB=$(printf "%s" "${STUB}" | tr -c 'A-Za-z0-9_.-' '_')
+   SCRATCHDIR=${RUN_SCRATCHROOT}/${test_index}_${SAFE_STUB}
 #
 # if $TEST is not a directory try use as root of filenames
 #
@@ -187,9 +200,9 @@ do
 
   echo "     cleaning scratch"
 
-  /bin/rm -rf $SCRATCHDIR
-  if [ ! -d $SCRATCHDIR ]; then
-    mkdir $SCRATCHDIR
+  /bin/rm -rf "$SCRATCHDIR"
+  if [ ! -d "$SCRATCHDIR" ]; then
+    mkdir -p "$SCRATCHDIR"
 	 status=$?
     if [ $status -ne 0 ]; then
       echo failed: cannot make $SCRATCHDIR
@@ -524,7 +537,9 @@ sync
 done
 
 cd $CURDIR
-/bin/rm -rf ${SCRATCHDIR}
+if [[ -z "${QA_KEEP_SCRATCH}" ]]; then
+  /bin/rm -rf "${RUN_SCRATCHROOT}"
+fi
   
 echo " "
 if [ $overall_status -ne 0 ]; then
