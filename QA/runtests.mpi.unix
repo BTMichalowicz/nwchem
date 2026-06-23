@@ -313,6 +313,13 @@ do
 #
   if [ $esp_test_run -ne 0 ]; then
     cp ${TESTDIR}/$ESPFILE $TESTOUTPUTS/${STUB}.ok.q
+    rm -f "${SCRATCHDIR}/${ESPFILE}" "${TESTOUTPUTS}/${ESPFILE}" "/tmp/${ESPFILE}"
+    if [[ -n "${NWCHEM_PERMANENT_DIR}" ]]; then
+      rm -f "${NWCHEM_PERMANENT_DIR}/${ESPFILE}"
+    fi
+    if [[ -n "${PERMANENT_DIR}" ]]; then
+      rm -f "${PERMANENT_DIR}/${ESPFILE}"
+    fi
   fi
 
 #
@@ -489,7 +496,26 @@ sync
       echo "OK" 
     elif [ $esp_test_run -ne 0 ]; then
 
-    cp ${SCRATCHDIR}/$ESPFILE $TESTOUTPUTS/.
+    esp_candidates=("${SCRATCHDIR}/${ESPFILE}" "/tmp/${ESPFILE}")
+    if [[ -n "${NWCHEM_PERMANENT_DIR}" ]]; then
+      esp_candidates+=("${NWCHEM_PERMANENT_DIR}/${ESPFILE}")
+    fi
+    if [[ -n "${PERMANENT_DIR}" ]]; then
+      esp_candidates+=("${PERMANENT_DIR}/${ESPFILE}")
+    fi
+    esp_found=
+    for esp_candidate in "${esp_candidates[@]}"; do
+      if [[ -f "${esp_candidate}" ]]; then
+        cp "${esp_candidate}" "${STUB}.q"
+        esp_found=1
+        break
+      fi
+    done
+    if [[ -z "${esp_found}" ]]; then
+      echo "ESP output file ${ESPFILE} not found"
+      let "overall_status+=1"
+      continue
+    fi
 #    echo "doing ls -l " ${STUB}.ok.q ${STUB}.q
     #    echo `ls -l ${STUB}.ok.q ${STUB}.q`
     rm -f esp_temp.ok.q esp_temp.q
