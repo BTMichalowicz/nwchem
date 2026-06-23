@@ -209,6 +209,13 @@ do
       exit 1
     fi
   fi
+  RUN_PERMANENTDIR=${PERMANENT_DIR:-$SCRATCHDIR}
+  mkdir -p "$RUN_PERMANENTDIR"
+  status=$?
+  if [ $status -ne 0 ]; then
+    echo failed: cannot make $RUN_PERMANENTDIR
+    exit 1
+  fi
 
   echo "     copying input and verified output files"
 
@@ -332,6 +339,8 @@ do
 
 # Run the calculation in the scratch directory
 
+  export NWCHEM_SCRATCH_DIR="$SCRATCHDIR"
+  export NWCHEM_PERMANENT_DIR="$RUN_PERMANENTDIR"
   cd ${SCRATCHDIR}
 
   [ -f $TESTOUTPUTS/${STUB}.out ] && /bin/rm -f $TESTOUTPUTS/${STUB}.out
