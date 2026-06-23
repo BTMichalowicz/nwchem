@@ -144,7 +144,7 @@ if [ $NPROC -gt 0 ]; then
 fi
 # Run the tests one at a time
 
- SCRATCHROOT=${CURDIR}/scratchdir
+ SCRATCHROOT=${QA_SCRATCHROOT:-${TMPDIR:-/tmp}/nwchem-qa}
  RUN_SCRATCHROOT=${SCRATCHROOT}/run.$$
  TESTOUTPUTS=${CURDIR}/testoutputs
 
@@ -280,6 +280,8 @@ do
       INPUTFILE=`pwd`/mynewinput.nw
       echo INPUTFILE modified for Simint is ${INPUTFILE}
   fi
+  RUN_INPUTFILE=$(basename "$INPUTFILE")
+  cp "$INPUTFILE" "$SCRATCHDIR/$RUN_INPUTFILE"
   # copy movecs for ducc test
    [ -f ${TESTDIR}/*.movecs ] && cp ${TESTDIR}/*movecs ${SCRATCHDIR}
   if [ $md_test_run -ne 1 ]; then
@@ -361,18 +363,18 @@ sync
     if [ $NPROC -gt 0 ]; then
       if [ $NONSTD_MPI -ne 0 ]; then
       if [ -z $USE_SLEEPLOOP ]; then
-          ${MPIRUN} ${NWCHEM} ${INPUTFILE} 2> ${ERRORFILE} 1> ${OUTPUTFILE}
+          ${MPIRUN} ${NWCHEM} ${RUN_INPUTFILE} 2> ${ERRORFILE} 1> ${OUTPUTFILE}
 	else
-          ${NWCHEM_TOP}/QA/sleep_loopqa.sh        $MPIRUN $NPOPT $NPROC $NWCHEM $INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
+          ${NWCHEM_TOP}/QA/sleep_loopqa.sh        $MPIRUN $NPOPT $NPROC $NWCHEM $RUN_INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
 	fi
         runstatus=$?
       else
-          $MPIRUN $NPOPT $NPROC $NWCHEM $INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
+          $MPIRUN $NPOPT $NPROC $NWCHEM $RUN_INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
 	  sync
         runstatus=$?
       fi
     else
-       $NWCHEM $INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
+       $NWCHEM $RUN_INPUTFILE 2> $ERRORFILE 1> $OUTPUTFILE
        runstatus=$?
     fi
     [ -f $OUTPUTFILE ] && cp $OUTPUTFILE $TESTOUTPUTS/$OUTPUTFILE
@@ -401,19 +403,19 @@ sync
 #       know what we are doing (i.e. above this script) and simply use that
 #       verbatim. Set MPIRUN_PATH for this purpose, its value is transfered 
 #       to MPIRUN at some point in this script.
-        $MPIRUN $NWCHEM $INPUTFILE  2> $TESTOUTPUTS/$ERRORFILE 1> $TESTOUTPUTS/$OUTPUTFILE
+        $MPIRUN $NWCHEM $RUN_INPUTFILE  2> $TESTOUTPUTS/$ERRORFILE 1> $TESTOUTPUTS/$OUTPUTFILE
         runstatus=$?
       else
 #       In the case of standard MPI we construct the appropriate command here.
       if [ -z $USE_SLEEPLOOP ]; then
-        $MPIRUN $NPOPT $NPROC $NWCHEM $INPUTFILE 2> ${TESTOUTPUTS}/${ERRORFILE} 1> ${TESTOUTPUTS}/${OUTPUTFILE}
+        $MPIRUN $NPOPT $NPROC $NWCHEM $RUN_INPUTFILE 2> ${TESTOUTPUTS}/${ERRORFILE} 1> ${TESTOUTPUTS}/${OUTPUTFILE}
       else
-          ${NWCHEM_TOP}/QA/sleep_loopqa.sh        $MPIRUN $NPOPT $NPROC $NWCHEM $INPUTFILE  2> $ERRORFILE 1> $OUTPUTFILE
+          ${NWCHEM_TOP}/QA/sleep_loopqa.sh        $MPIRUN $NPOPT $NPROC $NWCHEM $RUN_INPUTFILE  2> $ERRORFILE 1> $OUTPUTFILE
       fi
         runstatus=$?
       fi
     else
-      $NWCHEM $INPUTFILE 2> $TESTOUTPUTS/$ERRORFILE 1> $TESTOUTPUTS/$OUTPUTFILE
+      $NWCHEM $RUN_INPUTFILE 2> $TESTOUTPUTS/$ERRORFILE 1> $TESTOUTPUTS/$OUTPUTFILE
        runstatus=$?
     fi
 #
