@@ -41,6 +41,7 @@ c
          else
             if (.not.ma_push_get(mt_dbl,adim,'Temp2',l_t2,k_t2))   
      $         call errquit('tga_ddot:fail allocate t2',0, MA_ERR)
+            call ga_get(g_a,anlo,anhi,k,k,dbl_mb(k_t1),adim)
             call ga_get(g_a,anlo,anhi,l,l,dbl_mb(k_t2),adim)
             call tga_ddot_oper(x,dbl_mb(k_t1),dbl_mb(k_t2),adim)
             if (.not.ma_pop_stack(l_t2)) call errquit
