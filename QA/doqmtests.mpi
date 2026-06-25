@@ -87,7 +87,11 @@ let "myexit+=$?"
 echo ' '
 echo 'The oh2 test is testing the perl parsing script and SHOULD fail'
 ./runtests.mpi.unix procs $np oh2
-let "myexit+=$?"
+status=$?
+if [ $status -eq 0 ]; then
+  echo 'The oh2 test unexpectedly passed'
+  let "myexit+=1"
+fi
 #
 #---   medium tests
 ./runtests.mpi.unix procs $np PhoWat_SMD_HF
