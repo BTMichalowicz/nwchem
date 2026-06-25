@@ -16,6 +16,14 @@ if [ -n "$1" ]; then
    np="$1"
 fi
  what="$2"
+nwtop=${NWCHEM_TOP:-$(cd "$(dirname "$0")/.." && pwd)}
+nwtarget=${NWCHEM_TARGET:-LINUX64}
+python_tests=()
+if [[ -f "$nwtop/lib/$nwtarget/libnwpython.a" ]]; then
+  python_tests=(pyqa3)
+else
+  echo "Skipping pyqa3: NWChem was built without the python module"
+fi
 if [[ "$what" == "fast" ]]; then
   echo
   echo " ====================================="
@@ -35,7 +43,7 @@ fi
 myexit=0
 ./runtests.mpi.unix procs $np h2o_opt c2h4
 let "myexit+=$?"
-./runtests.mpi.unix procs $np auh2o autosym dft_he2+ h2mp2 h2o hess_h2o prop_h2o pyqa3
+./runtests.mpi.unix procs $np auh2o autosym dft_he2+ h2mp2 h2o hess_h2o prop_h2o "${python_tests[@]}"
 let "myexit+=$?"
 ./runtests.mpi.unix procs $np geom_zmatrix rimp2_ne rimp2_he scf_feco5 small_intchk tagcheck testtab
 let "myexit+=$?"
@@ -49,7 +57,7 @@ let "myexit+=$?"
 let "myexit+=$?"
 ./runtests.mpi.unix procs $np dft_bsse dft_bsse_d3 dft_bsse_d3_opt bsse_dft_trimer bsse_tce_mult
 let "myexit+=$?"
-PERMANENT_DIR=`pwd`/testoutputs ./runtests.mpi.unix procs $np dft_hess_start dft_hess_rest
+PERMANENT_DIR=${QA_TESTOUTPUTS:-`pwd`/testoutputs} ./runtests.mpi.unix procs $np dft_hess_start dft_hess_rest
 let "myexit+=$?"
 ./runtests.mpi.unix procs $np c4h4_wfn
 let "myexit+=$?"
