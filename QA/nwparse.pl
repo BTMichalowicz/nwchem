@@ -375,10 +375,14 @@ foreach $filename (@FILES_TO_PARSE) {
 		    printf FILE_OUTPUT "%s ", @line_tokens[$itok];
 		}
 #                                                    *** Assumes $itok was incremented above
-		if (! $quiet) {
-		    printf "%.7f\n", set_to_digits(@line_tokens[$itok],7);
+		$energy_digits = 7;
+		if (/CR-EOMCCSD\(T\)/) {
+		    $energy_digits = 6;
 		}
-		printf FILE_OUTPUT "%.7f\n", set_to_digits(@line_tokens[$itok],7);
+		if (! $quiet) {
+		    printf "%.*f\n", $energy_digits, set_to_digits(@line_tokens[$itok],$energy_digits);
+		}
+		printf FILE_OUTPUT "%.*f\n", $energy_digits, set_to_digits(@line_tokens[$itok],$energy_digits);
 	    }
 	}
 	}
