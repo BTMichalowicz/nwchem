@@ -30,6 +30,7 @@ end
 
 md
  system lys_em
+ msa 64
  cutoff 1.9   qmmm 1.0
 end
 
@@ -42,5 +43,4 @@ qmmm
 end
 
 task qmmm dft optimize ignore
-
 
