@@ -146,7 +146,7 @@ fi
 
  SCRATCHROOT=${QA_SCRATCHROOT:-${TMPDIR:-/tmp}/nwchem-qa}
  RUN_SCRATCHROOT=${SCRATCHROOT}/run.$$
- TESTOUTPUTS=${CURDIR}/testoutputs
+ TESTOUTPUTS=${QA_TESTOUTPUTS:-${CURDIR}/testoutputs}
 
 if [ ! -d $TESTOUTPUTS ]; then
   mkdir $TESTOUTPUTS
@@ -343,6 +343,18 @@ do
 
   export NWCHEM_SCRATCH_DIR="$SCRATCHDIR"
   export NWCHEM_PERMANENT_DIR="$RUN_PERMANENTDIR"
+  if [ -d "${NWCHEM_TOP}/src/data" ]; then
+    {
+      echo "ffield amber"
+      [ -d "${NWCHEM_TOP}/src/data/amber_s" ] && echo "amber_1 ${NWCHEM_TOP}/src/data/amber_s"
+      [ -d "${NWCHEM_TOP}/src/data/amber_x" ] && echo "amber_2 ${NWCHEM_TOP}/src/data/amber_x"
+      [ -d "${NWCHEM_TOP}/src/data/amber_q" ] && echo "amber_3 ${NWCHEM_TOP}/src/data/amber_q"
+      [ -d "${NWCHEM_TOP}/src/data/amber_u" ] && echo "amber_4 ${NWCHEM_TOP}/src/data/amber_u"
+      [ -d "${NWCHEM_TOP}/src/data/amber_t" ] && echo "amber_5 ${NWCHEM_TOP}/src/data/amber_t"
+      [ -d "${NWCHEM_TOP}/src/data/charmm_s" ] && echo "charmm_1 ${NWCHEM_TOP}/src/data/charmm_s"
+      [ -d "${NWCHEM_TOP}/src/data/charmm_x" ] && echo "charmm_2 ${NWCHEM_TOP}/src/data/charmm_x"
+    } > "${SCRATCHDIR}/nwchemrc"
+  fi
   cd ${SCRATCHDIR}
 
   [ -f $TESTOUTPUTS/${STUB}.out ] && /bin/rm -f $TESTOUTPUTS/${STUB}.out
