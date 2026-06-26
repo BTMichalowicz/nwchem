@@ -729,7 +729,7 @@ task scf
        Final RHF  results 
        ------------------ 
 
-         Total SCF energy =   -327.868626493523
+         Total SCF energy =   -327.868645019601
       One-electron energy =  -7905.184312462298
       Two-electron energy =   3860.570769891574
  Nuclear repulsion energy =   3716.744916077201
