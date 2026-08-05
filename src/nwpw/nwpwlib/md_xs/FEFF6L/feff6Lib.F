@@ -209,7 +209,7 @@ c        call head (16)
    40 format (1h1,40x,a40)
       n=-(ion+1)
 
-   60 continue
+      scf: do
       do 70 i=1,np
          d(i)=0.0
    70 continue
@@ -221,44 +221,45 @@ c        call head (16)
 c resolution of the dirac equation for each orbital
       do 150 j=1,norb
          de=den(j)
-   80    call feff_dirac (nqn(j),nql(j),nk(j),imax,den(j),
-     D        dfl(j),dq1(j),j)
-            if (nstop.eq.0) go to 110
-            if (nstop.ne.362.or.iter.ge.10.or.tets.gt.test) go to 90
+         retry: do
+            call feff_dirac (nqn(j),nql(j),nk(j),imax,den(j),
+     1           dfl(j),dq1(j),j)
+            if (nstop.eq.0) exit retry
+            if (nstop.ne.362.or.iter.ge.10.or.tets.gt.test) then
+               if (iprint .ge. 3)  write(16,100) nstop,nqn(j),titre(j)
+  100          format ('  nstop=',i4,'  for the orbital',i3,a2)
+               write(77,*) ' Fatal error.'
+               write(77,*) ' Wigner-Seitz or muffin tin radius may be',
+     1                    ' too small.'
+               stop 'ATOM-1'
+            endif
             tets=testv
-         go to 80
-   90    if (iprint .ge. 3)  write(16,100) nstop,nqn(j),titre(j)
-  100    format ('  nstop=',i4,'  for the orbital',i3,a2)
-         write(77,*) ' Fatal error.'
-         write(77,*) ' Wigner-Seitz or muffin tin radius may be',
-     1              ' too small.'
-         go to 999
+         end do retry
 
-  110    val=abs((den(j)-de)/de)
+         val=abs((den(j)-de)/de)
          if (val.gt.emax) emax=val
          nmax(j)=imax
          do 140 i=1,np
             val=dgc(i,j)-dp(i)
             if (abs(dp(i)).gt.1.0d0) val=val/dp(i)
-            if (abs(val).lt.abs(ymax)) go to 120
+            if (abs(val).ge.abs(ymax)) then
                ymax=val
                y=dp(i)
                yn=dgc(i,j)
-  120       val=dpc(i,j)-dq(i)
+            endif
+            val=dpc(i,j)-dq(i)
             if (abs(dq(i)).gt.1.0d0) val=val/dq(i)
-            if (abs(val).lt.abs(ymax)) go to 130
+            if (abs(val).ge.abs(ymax)) then
                ymax=val
                y=dq(i)
                yn=dpc(i,j)
-  130       dgc(i,j)=dp(i)
+            endif
+            dgc(i,j)=dp(i)
             dpc(i,j)=dq(i)
   140    d(i)=d(i)+nel(j)*(dp(i)*dp(i)+dq(i)*dq(i))
   150 continue
 
-c     dgc and dpc are set in loop above, only referenced in remainder
-c     of code, so save them into dgc0 and dpc0 here.  Note: np=251,
-c     set in indata.  dgc0 is large component
-c                     dpc0 is small
+c     dgc and dpc are set in loop above, save them into dgc0 and dpc0
       if (ispinr .ne. 0)  then
          do 152  i = 1, np
             dgc0(i) = dgc(i,ispinr)
@@ -266,93 +267,72 @@ c                     dpc0 is small
   152    continue
       endif
 
-      if (mark.eq.0) go to 280
-
+      if (mark .ne. 0) then
 c  This is case mark .ne. 0
 c  d is the core electron density resulting from the renormalized pot.
       dval=0.0
       do 160 j=1,norb
   160    dval=dval+nel(j)*den(j)
-
       dval=dval*2.0
-c jm-- core charge density commented away in unit 6 appears in unit 3--
       if (iprint .ge. 3)  write(16,170) dval
   170 format (1h ,' core energy = ',e15.8)
-
-c jm- renormalized potential
-
-c     note conversion to rydbergs using constant harryd
-c     passvt is part of old system to pass data directly from
-c     ATOM to PHASE
-c      do 200 ixx=1,251
-c  200    passvt(ixx)=harryd*dr(ixx)*dr(ixx)*dv(ixx)
-
-
-c  d is the core electron density resulting from the renormalized pot.
-
 c  next write renormalized electron density for each shell
       do 270 j=1,norb
          do 240 i=1,np
             d(i)=dgc(i,j)*sqrt(12.56637062d0)
   240    continue
   270 continue
-      go to 750
+      exit scf
+      endif
 
 c     mark .eq. 0 case
-  280 continue
-
       call potsl (dc,d,dp,dr,dpas,dexv,z,np,ion,icut,dvn)
-      if (nuc.le.0) go to 300
+      if (nuc.gt.0) then
          do 290 i=1,nuc
             dc(i)=dc(i)+z/dr(i)+z*((dr(i)/dr(nuc))**2-3.0d0) /
      1            (dr(nuc)+dr(nuc))
   290    continue
-  300 continue
+      endif
       do 310 i=1,np
          dval=abs(dc(i)-dv(i))
          if ((dr(i)*dc(i)).le.n) dval=-dval/dc(i)
-         if (dval.le.vmax) go to 310
+         if (dval.gt.vmax) then
             vmax=dval
             j=i
+         endif
   310 continue
 
-c     print 320, iter,vmax,dr(j),dv(j),dc(j),emax,ymax,yn,y
-c 320 format (i5,1pe11.2,3(1pe16.6),2(1pe11.2),2(1pe16.6))
-
-      if (tets.le.test.and.emax.le.teste.and.vmax.le.testv.and.ymax.le
-     1 .testy) go to 430
-      if (mark.eq.1) go to 430
-      iter=iter+1
-      if (iter.le.niter) go to 340
-      if (iprint .ge. 3)  write(16,330) niter
-  330 format (' number of iterations greater than',i4)
-      nstop=2
-c      print*, ' ATOM-Fatal error, too many iterations.'
-c      print*, '   iter, niter ', iter, niter
-      write(77,*) ' ATOM-Fatal error, too many iterations.'
-      write(77,*) '   iter, niter ', iter, niter
-      go to 999
+      if (.not.(tets.le.test.and.emax.le.teste.and.vmax.le.testv.and.
+     1    ymax.le.testy .or. mark.eq.1)) then
+         iter=iter+1
+         if (iter.gt.niter) then
+            if (iprint .ge. 3)  write(16,330) niter
+  330       format (' number of iterations greater than',i4)
+            nstop=2
+            write(77,*) ' ATOM-Fatal error, too many iterations.'
+            write(77,*) '   iter, niter ', iter, niter
+            stop 'ATOM-1'
+         endif
 c potential for the following iteration
-
-  340 continue
-      if (iter.eq.2) go to 350
-      if (iprat.eq.0) then
-      do 400 i=1,np
-      dval=dalp(dvn(i),dvf(i),dv(i),dc(i))
-      dvn(i)=dv(i)
-      dvf(i)=dc(i)
-  400 dv(i)=dval*dv(i)+(1.0d0-dval)*dc(i)
-      else
-  350 dval=1.0-dcop
-      do  i=1,np
-      dvn(i)=dv(i)
-      dvf(i)=dc(i)
-      dv(i)=dval*dv(i)+dcop*dc(i)
-      enddo
+         if (iter.ne.2 .and. iprat.eq.0) then
+            do 400 i=1,np
+            dval=dalp(dvn(i),dvf(i),dv(i),dc(i))
+            dvn(i)=dv(i)
+            dvf(i)=dc(i)
+  400       dv(i)=dval*dv(i)+(1.0d0-dval)*dc(i)
+         else
+            dval=1.0-dcop
+            do  i=1,np
+            dvn(i)=dv(i)
+            dvf(i)=dc(i)
+            dv(i)=dval*dv(i)+dcop*dc(i)
+            enddo
+         endif
+         cycle scf
       endif
-      go to 60
 
-  430 if (iprint .ge. 3)  write(16,40) ttl
+c     converged (was label 430)
+      if (iprint .ge. 3)  write(16,40) ttl
       if (iprint .ge. 3)  write(16,460)
   460 format (12x,'energie',12x,'(r4)',14x,'(r2)',14x,'(r)',15x,'(r-1)',
      1 13x,'(r-3)'/)
@@ -371,19 +351,17 @@ c valeurs moyennes de r
       if (iabs(nk(i)).eq.1) l=l-1
       do 550 j=1,l
       dp(j)=dfl(i)+dfl(i)
-c      if (j-2) 490,500,510
       if(j.lt.2) then
-  490 n=4
+      n=4
       elseif(j.eq.2) then
-  500 n=2
+      n=2
       else
-c  510 if (j-4) 520,530,540
       if(j.lt.4) then
-  520 n=1
+      n=1
       elseif(j.eq.4) then
-  530 n=-1
+      n=-1
       else
-  540 n=-3
+      n=-3
       endif
       endif
   550 call somm (dr,dc,dq,dpas,dp(j),n,im)
@@ -391,20 +369,21 @@ c  510 if (j-4) 520,530,540
      1                                   den(i),(dp(j),j=1,l)
   570 format (i3,a2,6(1pe18.7))
 
-      if (dexv.eq.0.0) go to 650
-
+      if (dexv.eq.0.0) then
+         call totale (dval)
+      else
 c energie totale en moyenne spherique
       do 580 i=1,norb
   580 tden(i)=-2.0d0*den(i)
-
       dc(1)=1
       do 600 i=1,np
   600 dp(i)=d(i)/dr(i)
-      if (nuc.le.0) go to 620
+      if (nuc.gt.0) then
       do 610 i=1,nuc
   610 dp(i)=d(i)*(3.0d0-dr(i)*dr(i)/(dr(nuc)*dr(nuc)))/(dr(nuc)+dr(nuc))
       dc(1)=4
-  620 call somm (dr,dp,dq,dpas,dc(1),0,np)
+      endif
+      call somm (dr,dp,dq,dpas,dc(1),0,np)
       do 630 i=1,np
       dp(i)=d(i)*dvf(i)
   630 d(i)=d(i)*((d(i)*dr(i))**(1.0d0/3.0d0))
@@ -422,24 +401,20 @@ c energie totale en moyenne spherique
       if (iprint .ge. 3)  write(16,640) dval,dc(4),dc(3),dc(2),dc(1)
   640 format (1h0,5x,'et=',1pe14.7,5x,'ec=',1pe14.7,5x,'ee=',1pe14.7,5x,
      1 'ex=',1pe14.7,5x,'en=',1pe14.7)
-      go to 660
-  650 call totale (dval)
-  660 continue
+      endif
 
-c     pass out eatom (total energy) (factor of 2 is to put energy in
-c     rydberg units)
+c     pass out eatom (total energy) (factor of 2 puts energy in rydbergs)
       eatom = 2 * dval
 
-      if (norb.eq.1) go to 710
+      if (norb.ne.1) then
       if (iprint .ge. 3)  write(16,40) ttl
       if (iprint .ge. 3)  write(16,670)
   670 format (1h0,47x,'overlap integrals         '/)
-
 c overlap integrals
-      do 700 i=2,norb
+      do i=2,norb
       k=i-1
-      do 700 j=1,k
-      if (nql(i).ne.nql(j).or.nk(i).ne.nk(j)) go to 700
+      jov: do j=1,k
+      if (nql(i).ne.nql(j).or.nk(i).ne.nk(j)) cycle jov
       im=nmax(j)
       if (nmax(i).lt.im) im=nmax(i)
       do 680 l=1,im
@@ -450,9 +425,10 @@ c overlap integrals
       if (iprint .ge. 3)  write(16,690) nqn(i),titre(i),
      1                                   nqn(j),titre(j),dval
   690 format (34x,i1,a2,i3,a2,f19.7)
-  700 continue
-  710 call cdsld
-
+      end do jov
+      end do
+      endif
+      call cdsld
 
       if (irnorm.eq.1) then
          call renorm (dexv, vcoul, srho)
@@ -461,10 +437,9 @@ c overlap integrals
   720 dc(i)=harryd*dv(i)*dr(i)**2
       if (irnorm.ne.1) stop 0000
       norb=norbco
-      if (norbco.eq.0) go to 750
-      if (mark.eq.1) go to 750
+      if (norbco.eq.0 .or. mark.eq.1) exit scf
       mark=1
-      go to 60
+      end do scf
 
   750 continue
 
@@ -476,10 +451,6 @@ c     return srho as 4*pi*density instead of 4*pi*density*r**2
       if (iprint .ge. 3)  close(unit=16)
 
       return
-
-
-  999 continue
-      stop 'ATOM-1'
       end
       subroutine besjn (x, jl, nl)
 
@@ -735,7 +706,7 @@ c          dnl = 1 * 3 * 5 * ... * (2*l-1)
       dnl = djl / (2*l+1)
 
 
-      if (ifl .eq. 2)   goto 90
+      if (ifl .ne. 2)  then
 c     make jl
 c     pj is term in { } in 10.1.2, del is last factor in the series
 c     convergence test is (last factor)/(total term) <= tol
@@ -745,21 +716,26 @@ c     convergence test is (last factor)/(total term) <= tol
       den = nfac
       sgn = -1
       ux = u
-      do 60 il = 1, niter
+      jlconv = 0
+      do il = 1, niter
          del = sgn*ux / den
          pj = pj + del
          trel = abs (del / pj)
-         if (trel .le. tol)  goto 80
+         if (trel .le. tol)  then
+            jlconv = 1
+            exit
+         endif
          sgn = -sgn
          ux = u*ux
          nf = nf+1
          nfac = nfac+2
          den = nf * nfac * den
-   60 continue
-      stop  'jl does not converge in bjnser'
-   80 jl = pj * (x**l) / djl
+      end do
+      if (jlconv .eq. 0)  stop  'jl does not converge in bjnser'
+      jl = pj * (x**l) / djl
+      endif
 
-   90 if (ifl.eq.1) return
+      if (ifl.eq.1) return
 c     make nl
 c     pn is term in { } in 10.1.3, del is last factor in the series
 c     convergence test is (last factor)/(total term) <= tol
@@ -769,19 +745,23 @@ c     convergence test is (last factor)/(total term) <= tol
       den = nfac
       sgn = -1
       ux = u
-      do 100  il = 1, niter
+      nlconv = 0
+      do il = 1, niter
          del = sgn * ux / den
          pn = pn + del
          trel = abs (del / pn)
-         if (trel .le. tol) goto 120
+         if (trel .le. tol)  then
+            nlconv = 1
+            exit
+         endif
          sgn = -sgn
          ux = u*ux
          nf = nf+1
          nfac = nfac+2
          den = nf * nfac * den
-  100 continue
-      stop  'nl does not converge in bjnser'
-  120 nl = -pn * dnl / (x**lp1)
+      end do
+      if (nlconv .eq. 0)  stop  'nl does not converge in bjnser'
+      nl = -pn * dnl / (x**lp1)
 
       return
       end
@@ -938,197 +918,276 @@ c titre = identification of the wave functions  s,p*,p,........
       character*40 ttl
       character*2  titre
       integer*4 n1,n1sum
+      logical single, valid
       common /char2/ titre(30), ttl
-
-c  -- This read commented out to make input easier, not used for
-c     PHASE calculations
+c
+c  -- These switches were forced to zero in the original (all input
+c     reads are commented out); kept for faithfulness.
       irm  = 0
       ins  = 0
       npun = 0
       nmfg = 0
       nmrk = 0
 c     read (5,10) irm,ins,npun,nmfg,nmrk
+c
+c=====================================================================
+c     Block A:  <r**j> moments             (was labels 30..190)
+c=====================================================================
+      if (irm .ne. 0) then
+         if (iprint .ge. 5) write(16,20) ttl
+         cardA: do
+            read (5,10) j,l,n1,l1,j1,n2,l2,j2
+            if (l .eq. 0) exit cardA
+            single = .false.
+            if (n1 .gt. 0) then
+               i1 = 0
+               i2 = 0
+               do i = 1, norb
+                  if (nqn(i).eq.n1 .and. nql(i).eq.l1 .and.
+     1                (j1-1).eq.(-nk(i)/iabs(nk(i)))) i1 = i
+                  if (nqn(i).eq.n2 .and. nql(i).eq.l2 .and.
+     1                (j2-1).eq.(-nk(i)/iabs(nk(i)))) i2 = i
+               end do
+               if (i1.eq.0 .or. i2.eq.0) then
+                  if (iprint.ge.5) write(16,70) j,l,n1,l1,j1,n2,l2,j2
+                  cycle cardA
+               end if
+               single = .true.
+               ia = i1
+               ib = i2
+            else if ((n1+1)*(n1+2) .ne. 0) then
+               if (iprint.ge.5) write(16,70) j,l,n1,l1,j1,n2,l2,j2
+               cycle cardA
+            else
+               ia = 1
+               ib = 1
+            end if
+            if (single) then
+               nhi1 = ia
+            else
+               nhi1 = norb
+            end if
+            do i1 = ia, nhi1
+               if (single) then
+                  nlo2 = ib
+                  nhi2 = ib
+               else if (n1 .eq. -1) then
+                  nlo2 = i1
+                  nhi2 = i1
+               else
+                  nlo2 = i1
+                  nhi2 = norb
+               end if
+               do i2 = nlo2, nhi2
+                  dval = dfl(i1)+dfl(i2)
+                  if ((dval+j) .le. -1.0d0) then
+                     if (single .and. iprint.ge.5)
+     1                    write(16,70) j,l,n1,l1,j1,n2,l2,j2
+                     cycle
+                  end if
+                  im = min0(nmax(i1),nmax(i2))
+                  if (l .ge. 0) then
+                     do i = 1, im
+                        dv(i) = dgc(i,i1)*dgc(i,i2)
+                        dq(i) = dpc(i,i1)*dpc(i,i2)
+                     end do
+                  else
+                     do i = 1, im
+                        dv(i) = dgc(i,i1)*dpc(i,i2)
+                        dq(i) = dgc(i,i2)*dpc(i,i1)
+                     end do
+                  end if
+                  call somm (dr,dv,dq,dpas,dval,j,im)
+                  if (l .ge. 0) then
+                     if (iprint.ge.5) write(16,140)
+     1                    j,nqn(i1),titre(i1),nqn(i2),titre(i2),dval
+                  else
+                     if (iprint.ge.5) write(16,160)
+     1                    j,nqn(i1),titre(i1),nqn(i2),titre(i2),dval
+                  end if
+               end do
+            end do
+         end do cardA
+      end if
+c
+c=====================================================================
+c     Block ins:  tabulate wave functions   (was labels 200..250)
+c=====================================================================
+      if (ins .ne. 0) then
+         do i = 1, norb, 3
+            j = min0(i+2, norb)
+            im = 0
+            do l = i, j
+               if (nmax(l).gt.im) im = nmax(l)
+            end do
+            do k = 1, im
+               if ((k-1)*(k-48*(k/48)) .eq. 0) then
+                  if (iprint.ge.5) write(16,20) ttl
+                  if (iprint.ge.5) write(16,220)
+     1                 (nqn(l),titre(l),nqn(l),titre(l), l=i,j)
+               end if
+               if (iprint.ge.5) write(16,240)
+     1              dr(k), (dgc(k,l),dpc(k,l), l=i,j)
+            end do
+         end do
+      end if
+c
+c=====================================================================
+c     Block npun / d() init                 (was labels 260..310)
+c=====================================================================
+      if (npun .ne. 0) then
+         do i = 1, np
+            dp(i) = dvf(i)*dr(i)
+         end do
+      end if
+      do i = 1, np
+         d(i) = 0.0d0
+      end do
+      nag = 1
+c
+c=====================================================================
+c     Block B:  magnetic fm / gm integrals   (was labels 330..460)
+c=====================================================================
+      if (nmfg .ne. 0) then
+         if (iprint.ge.5) write(16,20)
+         if (iprint.ge.5) write(16,320)
+         cardB: do
+            read (5,10) i1,i2,n1
+            if (i1 .le. 0) exit cardB
+            single = .false.
+            if (i2 .gt. 0) then
+               if (i1.gt.norb .or. i2.gt.norb) then
+                  if (iprint.ge.5) write(16,70) i1,i2,n1
+                  cycle cardB
+               end if
+               single = .true.
+               ia = i1
+               ib = i2
+            else if ((i2+1)*(i2+2) .ne. 0) then
+               if (iprint.ge.5) write(16,70) i1,i2,n1
+               cycle cardB
+            else
+               if (n1 .le. 0) n1 = 1
+               istart = n1
+               n1 = i2
+               ia = istart
+               ib = istart
+            end if
+            if (single) then
+               nhi1 = ia
+            else
+               nhi1 = norb
+            end if
+            do i1 = ia, nhi1
+               if (single) then
+                  nlo2 = ib
+                  nhi2 = ib
+               else if (n1 .eq. -1) then
+                  nlo2 = i1
+                  nhi2 = i1
+               else
+                  nlo2 = i1
+                  nhi2 = norb
+               end if
+               do i2 = nlo2, nhi2
+                  j1  = 2*iabs(nk(i1)) - 1
+                  j2  = 2*iabs(nk(i2)) - 1
+                  kma = min0(j1,j2)
+                  nm  = nmax(i2)
+                  do j = 1, kma, 2
+                     call ykdir (i1,i1,j,nag)
+                     do i = 1, nm
+                        dp(i) = dq(i)*dgc(i,i2)*dpc(i,i2)
+                     end do
+                     dval = j+1
+                     call somm (dr,d,dp,dpas,dval,-1,nm)
+                     if (iprint.ge.5) write(16,390)
+     1                    j,nqn(i1),titre(i1),nqn(i2),titre(i2),dval
+                  end do
+                  if (i1 .ne. i2) then
+                     j1  = (iabs(1-2*nk(i1))-1)/2
+                     j2  = (iabs(1-2*nk(i2))-1)/2
+                     kma = max0(nql(i1)+j2, nql(i2)+j1)
+                     j1  = iabs(nql(i2)-j1)
+                     j2  = iabs(nql(i1)-j2)
+                     kmi = min0(j1,j2)
+                     j1  = kmi+nql(i1)+nql(i2)
+                     j1  = j1 - 2*(j1/2)
+                     if (j1 .eq. 0) kmi = kmi+1
+                     nm  = min0(nmax(i1),nmax(i2))
+                     do j = kmi, kma, 2
+                        call ykdir (i1,i2,j,nag)
+                        do i = 1, nm
+                           dp(i) = dq(i)*dgc(i,i1)*dpc(i,i2)
+                           dc(i) = dq(i)*dgc(i,i2)*dpc(i,i1)
+                        end do
+                        dval  = j+1
+                        dvalp = dval
+                        dvalm = dval
+                        call somm (dr,d,dp,dpas,dvalp,-1,nm)
+                        call somm (dr,d,dc,dpas,dval ,-1,nm)
+                        call ykdir (i2,i1,j,nag)
+                        do i = 1, nm
+                           dp(i) = dq(i)*dgc(i,i2)*dpc(i,i1)
+                        end do
+                        call somm (dr,d,dp,dpas,dvalm,-1,nm)
+                        if (iprint.ge.5) write(16,430)
+     1                       j,nqn(i1),titre(i1),nqn(i2),titre(i2),
+     2                       dvalm,dval,dvalp
+                     end do
+                  end if
+               end do
+            end do
+         end do cardB
+      end if
+c
+c=====================================================================
+c     Block C:  magnetic rk integrals       (was labels 490..520)
+c=====================================================================
+      if (nmrk .ne. 0) then
+         if (iprint.ge.5) write(16,20)
+         if (iprint.ge.5) write(16,480)
+         cardC: do
+            read (5,10) i1,i2,i3,i4,k
+            if (i1 .le. 0) exit cardC
+            valid = i1.le.norb .and. i2.gt.0 .and. i2.le.norb .and.
+     1              i3.gt.0 .and. i3.le.norb .and. i4.gt.0 .and.
+     2              i4.le.norb .and. k.ge.0
+            if (.not. valid) then
+               if (iprint.ge.5) write(16,70) i1,i2,i3,i4,k
+               cycle cardC
+            end if
+            call ykdir (i1,i2,k,nag)
+            do i = 1, np
+               dp(i) = dq(i)*dgc(i,i3)*dpc(i,i4)
+            end do
+            dval = k+1
+            call somm (dr,d,dp,dpas,dval,-1,np)
+            if (iprint.ge.5) write(16,520) k,nqn(i1),titre(i1),
+     1           nqn(i2),titre(i2),nqn(i3),titre(i3),nqn(i4),titre(i4),
+     2           dval
+         end do cardC
+      end if
+c
+c     ---- formats (hoisted; labels are program-unit scoped) ----------
    10 format (8i3)
-
-c valeurs moyennes de r**j  if irm non-zero
-c tabulation of the wave functions if ins non-zero
-c the potential multiplied by r is perfore if npun non-zero
-      if (irm.eq.0) go to 200
-      if (iprint .ge. 5)  write(16,20) ttl
    20 format (1h1,40x,a40,/)
-   30 read (5,10) j,l,n1,l1,j1,n2,l2,j2
-      if (l.eq.0) go to 200
-
-c valeur moyenne of (p1*p2+q1*q2)*r**j  if l positive
-c valeur moyenne of (p1*q2+p2*q1)*r**j  if l negative
-      if (n1.gt.0) go to 40
-      if (((n1+1)*(n1+2)).ne.0) go to 60
-      i1=1
-      i2=1
-      go to 80
-   40 i1=0
-      i2=0
-      do 50 i=1,norb
-      if (nqn(i).eq.n1.and.nql(i).eq.l1.and.(j1-1).eq.(-nk(i)/iabs(nk(i)
-     1 ))) i1=i
-      if (nqn(i).eq.n2.and.nql(i).eq.l2.and.(j2-1).eq.(-nk(i)/iabs(nk(i)
-     1 ))) i2=i
-   50 continue
-      if (i1.ne.0.and.i2.ne.0) go to 80
-   60 if (iprint .ge. 5)  write(16,70) j,l,n1,l1,j1,n2,l2,j2
    70 format (1h0,'    error for the card     ',8i3)
-      go to 30
-   80 dval=dfl(i1)+dfl(i2)
-      if ((dval+j).gt.-1.0) go to 90
-      if (n1) 170,170,60
-   90 im=nmax(i1)
-      if (nmax(i2).lt.im) im=nmax(i2)
-      if (l.lt.0) go to 110
-      do 100 i=1,im
-      dv(i)=dgc(i,i1)*dgc(i,i2)
-  100 dq(i)=dpc(i,i1)*dpc(i,i2)
-      go to 130
-  110 do 120 i=1,im
-      dv(i)=dgc(i,i1)*dpc(i,i2)
-  120 dq(i)=dgc(i,i2)*dpc(i,i1)
-  130 call somm (dr,dv,dq,dpas,dval,j,im)
-      if (l.lt.0) go to 150
-      if (iprint .ge. 5)  write(16,140) j,nqn(i1),titre(i1),nqn(i2),
-     1                                   titre(i2),dval
-  140 format (24x,'(p1p2+q1q2)r**',i2,' for  ',i1,a2,i3,a2,5x,'=',1pe14.
-     1 7,/)
-      go to 170
-  150 if (iprint .ge. 5)  write(16,160) j,nqn(i1),titre(i1),nqn(i2),
-     1                                   titre(i2),dval
-  160 format (24x,'(p1q2+q1p2)r**',i2,' for  ',i1,a2,i3,a2,5x,'=',1pe14.
-     1 7,/)
-  170 n1sum=n1+1
-      if (n1sum) 190,180,30
-  180 i1=i1+1
-      i2=i1
-      n1sum=i1-norb
-      if (n1sum) 80,80,30
-  190 i2=i2+1
-      n1sum=i2-norb
-      if (n1sum) 80,80,180
-  200 if (ins.eq.0) go to 260
-      do 250 i=1,norb,3
-      j=i+2
-      if (j.gt.norb) j=norb
-      im=0
-      do 210 l=i,j
-      if (nmax(l).gt.im) im=nmax(l)
-  210 continue
-      do 230 k=1,im
-      if (((k-1)*(k-48*(k/48))).ne.0) go to 230
-      if (iprint .ge. 5)  write(16,20) ttl
-      if (iprint .ge. 5)  write(16,220) (nqn(l),titre(l),nqn(l),
-     1                                     titre(l),l=i,j)
+  140 format (24x,'(p1p2+q1q2)r**',i2,' for  ',i1,a2,i3,a2,5x,'=',
+     1        1pe14.7,/)
+  160 format (24x,'(p1q2+q1p2)r**',i2,' for  ',i1,a2,i3,a2,5x,'=',
+     1        1pe14.7,/)
   220 format (9x,'r',14x,3(i1,a2,'g.c.',i11,a2,'p.c.',10x))
-  230 if (iprint .ge. 5)  write(16,240) dr(k),
-     1                                   (dgc(k,l),dpc(k,l),l=i,j)
   240 format (7(1pe17.7))
-  250 continue
-  260 if (npun.eq.0) go to 300
-      do 270 i=1,np
-  270 dp(i)=dvf(i)*dr(i)
-c     write(8,280) ttl
-  280 format (a40)
-c     write(8,290) (dp(i),i=1,np)
-  290 format (8f9.4)
-  300 do 310 i=1,np
-  310 d(i)=0.0
-      nag=1
-      if (nmfg.eq.0) go to 470
-      if (iprint .ge. 5)  write(16,20)
-      if (iprint .ge. 5)  write(16,320)
   320 format (/,30x,'integrales magnetiques directes et d echange'//)
-  330 read (5,10) i1,i2,n1
-      if (i1.le.0) go to 470
-      if (i2.gt.0) go to 350
-      if (((i2+1)*(i2+2)).ne.0) go to 340
-      if (n1.le.0) n1=1
-      i1=n1
-      n1=i2
-      i2=i1
-      go to 360
-  340 if (iprint .ge. 5)  write(16,70) i1,i2,n1
-      go to 330
-  350 if (i1.gt.norb.or.i2.gt.norb) go to 340
-      n1=1
-  360 j1=2*iabs(nk(i1))-1
-      j2=2*iabs(nk(i2))-1
-      kma=min0(j1,j2)
-      nm=nmax(i2)
-      do 380 j=1,kma,2
-      call ykdir (i1,i1,j,nag)
-      do 370 i=1,nm
-  370 dp(i)=dq(i)*dgc(i,i2)*dpc(i,i2)
-      dval=j+1
-      call somm (dr,d,dp,dpas,dval,-1,nm)
-  380 if (iprint .ge. 5)  write(16,390) j,nqn(i1),titre(i1),nqn(i2),
-     1                                   titre(i2),dval
   390 format (20x,'fm',i2,' (',i1,a2,',',i1,a2,') =',1pe14.7)
-      if (i1.eq.i2) go to 440
-      j1=(iabs(1-2*nk(i1))-1)/2
-      j2=(iabs(1-2*nk(i2))-1)/2
-      kma=max0(nql(i1)+j2,nql(i2)+j1)
-      j1=iabs(nql(i2)-j1)
-      j2=iabs(nql(i1)-j2)
-      kmi=min0(j1,j2)
-      j1=kmi+nql(i1)+nql(i2)
-      j1=j1-2*(j1/2)
-      if (j1.eq.0) kmi=kmi+1
-      nm=min0(nmax(i1),nmax(i2))
-      do 420 j=kmi,kma,2
-      call ykdir (i1,i2,j,nag)
-      do 400 i=1,nm
-      dp(i)=dq(i)*dgc(i,i1)*dpc(i,i2)
-  400 dc(i)=dq(i)*dgc(i,i2)*dpc(i,i1)
-      dval=j+1
-      dvalp=dval
-      dvalm=dval
-      call somm (dr,d,dp,dpas,dvalp,-1,nm)
-      call somm (dr,d,dc,dpas,dval,-1,nm)
-      call ykdir (i2,i1,j,nag)
-      do 410 i=1,nm
-  410 dp(i)=dq(i)*dgc(i,i2)*dpc(i,i1)
-      call somm (dr,d,dp,dpas,dvalm,-1,nm)
-  420 if (iprint .ge. 5)  write(16,430) j,nqn(i1),titre(i1),nqn(i2),
-     1                                   titre(i2),dvalm,dval,dvalp
-  430 format (' gm',i2,' (',i1,a2,',',i1,a2,')',5x,'(-1)=',1pe14.7,5x,'(
-     10)=',1pe14.7,5x,'(+1)=',1pe14.7)
-  440 n1sum=n1+1
-      if (n1sum) 460,450,330
-  450 i1=i1+1
-      i2=i1
-      n1sum=i1-norb
-      if (n1sum) 360,360,330
-  460 i2=i2+1
-      n1sum=i2-norb
-      if (n1sum) 360,360,450
-  470 if (nmrk.eq.0) go to 530
-      if (iprint .ge. 5)  write(16,20)
-      if (iprint .ge. 5)  write(16,480)
-  480 format (/,20x,'integrales magnetiques rk=integrale de p1(1)*q2(1)*
-     1uk(1,2)*p3(2)*q4(2)'//)
-  490 read (5,10) i1,i2,i3,i4,k
-      if (i1.le.0) go to 530
-      if (i1.le.norb.and.i2.gt.0.and.i2.le.norb.and.i3.gt.0.and.i3.le
-     1 .norb.and.i4.gt.0.and.i4.le.norb.and.k.ge.0) go to 500
-      if (iprint .ge. 5)  write(16,70) i1,i2,i3,i4,k
-      go to 490
-  500 call ykdir (i1,i2,k,nag)
-      do 510 i=1,np
-  510 dp(i)=dq(i)*dgc(i,i3)*dpc(i,i4)
-      dval=k+1
-      call somm (dr,d,dp,dpas,dval,-1,np)
-      if (iprint .ge. 5)  write(16,520) k,nqn(i1),titre(i1),nqn(i2),
-     1              titre(i2),nqn(i3),titre(i3),nqn(i4),titre(i4),dval
-  520 format (20x,'rm',i2,' (',i1,a2,',',i1,a2,',',i1,a2,',',i1,a2,') ='
-     1 ,1pe14.7)
-      go to 490
-  530 return
+  430 format (' gm',i2,' (',i1,a2,',',i1,a2,')',5x,'(-1)=',1pe14.7,5x,
+     1        '(0)=',1pe14.7,5x,'(+1)=',1pe14.7)
+  480 format (/,20x,'integrales magnetiques rk=integrale de p1(1)*',
+     1        'q2(1)*uk(1,2)*p3(2)*q4(2)'//)
+  520 format (20x,'rm',i2,' (',i1,a2,',',i1,a2,',',i1,a2,',',
+     1        i1,a2,') =',1pe14.7)
+      return
       end
       subroutine chopen (ios, fname, mod)
 #ifdef CRAYFORTRAN
@@ -1290,14 +1349,17 @@ c
 c procedure of pratt to accelerate the convergence
 c d1=initial (n-1);   d2=final (n-1);   d3=initial (n);   d4=final (n);
 c **********************************************************************
-      if ((d1+d4).eq.(d2+d3)) go to 10
-      d=(d4-d2)/((d1+d4)-(d2+d3))
-      if (d.lt.0.0d0) go to 20
-      if (d.lt.0.5d0) go to 30
-   10 d=0.5d0
-      go to 30
-   20 d=0.0d0
-   30 dalp=d
+      if ((d1+d4).eq.(d2+d3)) then
+         d=0.5d0
+      else
+         d=(d4-d2)/((d1+d4)-(d2+d3))
+         if (d.lt.0.0d0) then
+            d=0.0d0
+         else if (d.ge.0.5d0) then
+            d=0.5d0
+         end if
+      end if
+      dalp=d
       return
       end
       subroutine feff_diff(v, dx, n, vm)
@@ -1360,167 +1422,189 @@ c **********************************************************************
       lll=(nql*(nql+1))/2
       nd=0
       noeud=nqn-nql
-      if (lll.ne.0) go to 10
-      elim=-z*z/(1.5d0*nqn*nqn)
-      go to 40
-   10 elim=dv(1)+lll/(dr(1)*dr(1))
-      do 20 i=2,np
-      val=dv(i)+lll/(dr(i)*dr(i))
-      if (val.le.elim) elim=val
-   20 continue
-      if (elim) 40,30,30
-   30 nstop=17
-c 2*v+l*(l+1)/r**2 is everywhere positive
-c **********************************************************************
-      return
-   40 if (de.le.elim) de=elim*0.5d0
-   50 if (imm.eq.1) go to 80
-      do 60 i=7,np,2
-      imat=np+1-i
-      if ((dv(imat)+lll/(dr(imat)*dr(imat))-de).le.0.0d0) go to 70
-   60 continue
-   70 if (imat.gt.5) go to 80
-      de=de*0.5d0
-      if (de.lt.-test.and.nd.le.noeud) go to 50
-      nstop=28
-c 2*v+l*(l+1)/r**2-2*e is everywhere positive
-c **********************************************************************
-      return
-c initial value for the outward integration
-c **********************************************************************
-   80 db=de/dvc
-      call inouh (dp,dq,dr,dq1,dfl,dv(1),z,test,nuc,nstop,jc)
-      if (nstop) 310,90,310
-c     nstop=45
-c the expansion at the origin does not converge
-c **********************************************************************
-   90 nd=1
-      do 110 i=1,5
-      dval=dr(i)**dfl
-      if (i.eq.1) go to 100
-      if (dp(i-1).eq.0.0d0) go to 100
-      if ((dp(i)/dp(i-1)).gt.0.0d0) go to 100
-      nd=nd+1
-  100 dp(i)=dp(i)*dval
-      dq(i)=dq(i)*dval
-      dep(i)=dep(i)*dval
-  110 deq(i)=deq(i)*dval
-      k=-1+2*(noeud-2*(noeud/2))
-      if ((dp(1)*k).gt.0.0d0) go to 130
-  120 nstop=53
-c error in the expansion at the origin
-c **********************************************************************
-      return
-  130 if ((k*nk*dq(1)).lt.0.0d0) go to 120
-      dm=dpas*dkoef
-c outward integration
-c **********************************************************************
-      do 140 i=6,imat
-      dp(i)=dp(i-1)
-      dq(i)=dq(i-1)
-      call inth (dp(i),dq(i),dv(i),dr(i))
-      if (dp(i-1).eq.0.0d0) go to 140
-      if ((dp(i)/dp(i-1)).gt.0.0d0) go to 140
-      nd=nd+1
-      if (nd.gt.noeud) go to 150
-  140 continue
-      if (nd.eq.noeud) go to 160
-      de=0.8d0*de
-      if (de.lt.-test) go to 50
-      nstop=206
-c the number of nodes is too small
-c **********************************************************************
-      return
-  150 de=1.2d0*de
-      if (de.gt.elim) go to 50
-      nstop=210
-c the number of nodes is too big
-c **********************************************************************
-      return
-c initial values for the inward integration
-c **********************************************************************
-  160 dqm=dq(imat)
-      dpm=dp(imat)
-      if (imm.eq.1) go to 180
-      do 170 i=1,np,2
-      imax=np+1-i
-      if(((dv(imax)-de)*dr(imax)*dr(imax)).le.300.0d0) go to 180
-  170 continue
-  180 dd=sqrt(-de*(2.0d0+db/dvc))
-      dpq=-dd/(dsal+db)
-      dm=-dm
-      do 190 i=1,5
-      j=imax+1-i
-      dp(j)=exp(-dd*dr(j))
-      dep(i)=-dd*dp(j)*dr(j)
-      dq(j)=dpq*dp(j)
-  190 deq(i)=dpq*dep(i)
-      m=imax-5
-c inward integration
-c***********************************************************************
-      do 200 i=imat,m
-      j=m+imat-i
-      dp(j)=dp(j+1)
-      dq(j)=dq(j+1)
-  200 call inth (dp(j),dq(j),dv(j),dr(j))
-c joining of the large components
-c **********************************************************************
-      dval=dpm/dp(imat)
-      if (dval.gt.0.0d0) go to 210
-      nstop=312
-c error in the sign of the large component
-c **********************************************************************
-      return
-  210 do 220 i=imat,imax
-      dp(i)=dp(i)*dval
-  220 dq(i)=dq(i)*dval
-c calculation of the norm
-c **********************************************************************
-      dsum=3.0d0*dr(1)*(dp(1)**2+dq(1)**2)/(dpas*(dfl+dfl+1.0d0))
-      do 230 i=3,imax,2
-  230 dsum=dsum+dr(i)*(dp(i)**2+dq(i)**2)
-     > +4.0d0*dr(i-1)*(dp(i-1)**2+dq(i-
-     1 1)**2)+dr(i-2)*(dp(i-2)**2+dq(i-2)**2)
-      dsum=dpas*(dsum+dr(imat)*(dqm*dqm-dq(imat)*dq(imat)))*0.3333333333
-     1 333333d0
-c modification of the energy
-c **********************************************************************
-      dbe=dp(imat)*(dqm-dq(imat))*dvc/dsum
-      imm=0
-      val=abs(dbe/de)
-      if (val.le.test) go to 260
-  240 dval=de+dbe
-      if (dval.lt.0.0d0) go to 250
-      dbe=dbe*0.5d0
-      val=val*0.5d0
-      if (val.gt.test) go to 240
-      nstop=345
-c energie nulle
-c **********************************************************************
-      return
-  250 de=dval
-      if (val.le.0.1d0) imm=1
-      ies=ies+1
-      if (ies.le.nes) go to 50
-      nstop=362
-c number of iterations too big
-c **********************************************************************
-      return
-  260 dsum=sqrt(dsum)
+      if (lll.ne.0) then
+         elim=dv(1)+lll/(dr(1)*dr(1))
+         do i=2,np
+            val=dv(i)+lll/(dr(i)*dr(i))
+            if (val.le.elim) elim=val
+         end do
+c        2*v+l*(l+1)/r**2 is everywhere positive
+         if (elim.ge.0.0d0) then
+            nstop=17
+            return
+         end if
+      else
+         elim=-z*z/(1.5d0*nqn*nqn)
+      end if
+      if (de.le.elim) de=elim*0.5d0
+c
+c     ==== main energy-search iteration (was label 50) ==============
+      energy: do
+c        find matching point imat (skipped when imm=1)
+         if (imm.ne.1) then
+            do i=7,np,2
+               imat=np+1-i
+               if ((dv(imat)+lll/(dr(imat)*dr(imat))-de).le.0.0d0) exit
+            end do
+            if (imat.le.5) then
+               de=de*0.5d0
+               if (de.lt.-test .and. nd.le.noeud) cycle energy
+c              2*v+l*(l+1)/r**2-2*e is everywhere positive
+               nstop=28
+               return
+            end if
+         end if
+c        ---- initial value for the outward integration (label 80) -
+         db=de/dvc
+         call inouh (dp,dq,dr,dq1,dfl,dv(1),z,test,nuc,nstop,jc)
+c        the expansion at the origin does not converge if nstop set
+         if (nstop.ne.0) return
+c        ---- count nodes near the origin (was label 90) -----------
+         nd=1
+         do i=1,5
+            dval=dr(i)**dfl
+            if (i.ne.1) then
+               if (dp(i-1).ne.0.0d0) then
+                  if ((dp(i)/dp(i-1)).le.0.0d0) nd=nd+1
+               end if
+            end if
+            dp(i)=dp(i)*dval
+            dq(i)=dq(i)*dval
+            dep(i)=dep(i)*dval
+            deq(i)=deq(i)*dval
+         end do
+         k=-1+2*(noeud-2*(noeud/2))
+c        error in the expansion at the origin (was labels 120/130)
+         if ((dp(1)*k).le.0.0d0) then
+            nstop=53
+            return
+         end if
+         if ((k*nk*dq(1)).lt.0.0d0) then
+            nstop=53
+            return
+         end if
+         dm=dpas*dkoef
+c        ---- outward integration (was do 140) ---------------------
+         itoobig=0
+         do i=6,imat
+            dp(i)=dp(i-1)
+            dq(i)=dq(i-1)
+            call inth (dp(i),dq(i),dv(i),dr(i))
+            if (dp(i-1).ne.0.0d0) then
+               if ((dp(i)/dp(i-1)).le.0.0d0) then
+                  nd=nd+1
+                  if (nd.gt.noeud) then
+                     itoobig=1
+                     exit
+                  end if
+               end if
+            end if
+         end do
+         if (itoobig.ne.0) then
+c           the number of nodes is too big (was label 150)
+            de=1.2d0*de
+            if (de.gt.elim) cycle energy
+            nstop=210
+            return
+         else if (nd.ne.noeud) then
+c           the number of nodes is too small
+            de=0.8d0*de
+            if (de.lt.-test) cycle energy
+            nstop=206
+            return
+         end if
+c        ---- initial values for the inward integration (label 160) -
+         dqm=dq(imat)
+         dpm=dp(imat)
+         if (imm.ne.1) then
+            do i=1,np,2
+               imax=np+1-i
+               if (((dv(imax)-de)*dr(imax)*dr(imax)).le.300.0d0) exit
+            end do
+         end if
+         dd=sqrt(-de*(2.0d0+db/dvc))
+         dpq=-dd/(dsal+db)
+         dm=-dm
+         do i=1,5
+            j=imax+1-i
+            dp(j)=exp(-dd*dr(j))
+            dep(i)=-dd*dp(j)*dr(j)
+            dq(j)=dpq*dp(j)
+            deq(i)=dpq*dep(i)
+         end do
+         m=imax-5
+c        ---- inward integration (was do 200) ----------------------
+         do i=imat,m
+            j=m+imat-i
+            dp(j)=dp(j+1)
+            dq(j)=dq(j+1)
+            call inth (dp(j),dq(j),dv(j),dr(j))
+         end do
+c        joining of the large components
+         dval=dpm/dp(imat)
+         if (dval.le.0.0d0) then
+c           error in the sign of the large component
+            nstop=312
+            return
+         end if
+         do i=imat,imax
+            dp(i)=dp(i)*dval
+            dq(i)=dq(i)*dval
+         end do
+c        ---- calculation of the norm (was do 230) -----------------
+         dsum=3.0d0*dr(1)*(dp(1)**2+dq(1)**2)/(dpas*(dfl+dfl+1.0d0))
+         do i=3,imax,2
+            dsum=dsum+dr(i)*(dp(i)**2+dq(i)**2)
+     1       +4.0d0*dr(i-1)*(dp(i-1)**2+dq(i-1)**2)
+     2       +dr(i-2)*(dp(i-2)**2+dq(i-2)**2)
+         end do
+         dsum=dpas*(dsum+dr(imat)*(dqm*dqm-dq(imat)*dq(imat)))
+     1        *0.3333333333333333d0
+c        ---- modification of the energy ---------------------------
+         dbe=dp(imat)*(dqm-dq(imat))*dvc/dsum
+         imm=0
+         val=abs(dbe/de)
+         if (val.le.test) exit energy
+c        keep the proposed energy negative (was label 240)
+         do
+            dval=de+dbe
+            if (dval.lt.0.0d0) exit
+            dbe=dbe*0.5d0
+            val=val*0.5d0
+            if (val.le.test) then
+c              energie nulle
+               nstop=345
+               return
+            end if
+         end do
+c        accept the new energy (was label 250)
+         de=dval
+         if (val.le.0.1d0) imm=1
+         ies=ies+1
+         if (ies.le.nes) cycle energy
+c        number of iterations too big
+         nstop=362
+         return
+      end do energy
+c     ==== converged: normalize (was label 260) =====================
+      dsum=sqrt(dsum)
       dq1=dq1/dsum
-      do 270 i=1,imax
-      dp(i)=dp(i)/dsum
-  270 dq(i)=dq(i)/dsum
-      do 280 i=1,4
-      dpno(i,jc)=dpno(i,jc)/dsum
-  280 dqno(i,jc)=dqno(i,jc)/dsum
-      if (imax.eq.np) go to 300
-      j=imax+1
-      do 290 i=j,np
-      dp(i)=0.0d0
-  290 dq(i)=0.0d0
-  300 nstop=0
-  310 return
+      do i=1,imax
+         dp(i)=dp(i)/dsum
+         dq(i)=dq(i)/dsum
+      end do
+      do i=1,4
+         dpno(i,jc)=dpno(i,jc)/dsum
+         dqno(i,jc)=dqno(i,jc)/dsum
+      end do
+      if (imax.ne.np) then
+         do i=imax+1,np
+            dp(i)=0.0d0
+            dq(i)=0.0d0
+         end do
+      end if
+      nstop=0
+      return
       end
       double precision function feff_dist(r0, r1)
 c     find distance between cartesian points r0 and r1
@@ -1599,13 +1683,13 @@ c  d=4pi*rho*r^2 , radial density for r=dr
 c  this function calculates exch=-r*Vexch
 c  105.27578=32*(pi^2)/3
 c  comments added by j. mustre 8/27/87
-      if (dexv.eq.0.0d0) go to 10
+      if (dexv.ne.0.0d0) then
       exchan=3.0d0*dexv*((dr*d/105.27578d0)**(1.0d0/3.0d0))
-      return
-   10 continue
+      else
       rrs=(d/(3.0d0*dr**2))**0.33333333333d0
       exchan=+0.5d0*(1.22177412d0*rrs
      >        +0.0504d0*log(30.0d0*rrs+1.0d0))*dr
+      end if
       return
       end
       double precision function exchee (d,dr)
@@ -1896,14 +1980,14 @@ c     Open sig2.dat if necessary (output) and start header
      1        '  Temp', f8.2, '  Debye temp', f8.2)
   517 format('    Use Debye-Waller factors from files.dat.  S02', f7.3)
 
-   10 continue
+      do
          read(2,11,end=399)  line
    11    format (a)
          call triml (line)
          nwords = nwordx
          call bwords (line, nwords, words)
 c        if line was blank, skip it and go on to next line
-         if (nwords .lt. 1)  goto 10
+         if (nwords .lt. 1)  cycle
 
          ntotal = ntotal+1
 c        word 1 - feff.dat file name
@@ -1919,7 +2003,7 @@ c        Write output if path is important enough (ie, path is
          if (crit .lt. critcw)  then
             write(77,17) words(1)(1:15), crit, '   (not used)  '
    17       format (4x, a, f10.4, a)
-            goto 10
+            cycle
          endif
 
 c        Read feff.dat file
@@ -1963,7 +2047,8 @@ c        Put path into chi.dat header, sig2.dat as required
 
 c        read data
          i = 1
-  120    read(1,*,end=130)  xk(i), cdelta(i), afeff(i),
+         do
+         read(1,*,end=130)  xk(i), cdelta(i), afeff(i),
      1             phfeff(i), redfac(i), xlam(i), rep(i)
 
 c           make complex momentum
@@ -1987,7 +2072,7 @@ c           put everything back into Ang and invAng
 
             npts = i
             i = i+1
-         goto 120
+         end do
   130    continue
          close(unit=1)
 
@@ -2046,7 +2131,7 @@ c           find end of data, eps4 is to handle round-off (we've been
 c           reading files with limited precision)
             if (xk0 .gt. xk(npts)+eps4)  then
                nkx = i-1
-               goto 331
+               exit
             endif
             call terp (xk, achi,  npts, xk0, achi0)
             call terp (xk, achix, npts, xk0, achix0)
@@ -2096,7 +2181,7 @@ c           will turn out wierdly
   340       continue
          endif
 
-      goto 10
+      end do
   399 continue
       close (unit=2)
 
@@ -2429,21 +2514,22 @@ c     calculate factors gam and gamtl
             tltl = tltl * tl
          endif
          lam12x = max (lam1x, lam2x)
-         do 20  lam = 1, lam12x
+         mloop: do  lam = 1, lam12x
             m = mlam(lam)
-            if (m .lt. 0)  goto 20
+            if (m .lt. 0)  cycle mloop
             im = m+1
-            if (im .gt. il)  goto 20
+            if (im .gt. il)  cycle mloop
             in = nlam(lam) + 1
             imn = in + m
-            if (lam .gt. lam1x)  goto 10
-            cam = xnlm(il,im) * (-1)**m
-            if (imn .le. il)  gam(il,im,in) = cam * clmi(il,imn,ileg)
-            if (imn .gt. il)  gam(il,im,in) = 0
-   10       if (lam .gt. lam2x) goto 20
+            if (lam .le. lam1x)  then
+               cam = xnlm(il,im) * (-1)**m
+               if (imn .le. il)  gam(il,im,in) = cam * clmi(il,imn,ileg)
+               if (imn .gt. il)  gam(il,im,in) = 0
+            endif
+            if (lam .gt. lam2x) cycle mloop
             camt = tltl / xnlm(il,im)
             gamtl(il,im,in) = camt * clmi(il,in,ilegp)
-   20    continue
+         end do mloop
    30 continue
 
       do 60 lam1 = 1,lam1x
@@ -2457,16 +2543,16 @@ c     calculate factors gam and gamtl
             imn1 = iam1 + in1 - 1
             cterm = 0.0d0
             ilmin = max (iam1, iam2, imn1, in2, iln)
-            do 40  il = ilmin, ilx
+            do  il = ilmin, ilx
 c              skip terms with mu > l (NB il=l+1, so mu=il is mu>l)
-               if (abs(m1).ge.il .or. abs(m2).ge.il)  goto 40
+               if (abs(m1).ge.il .or. abs(m2).ge.il)  cycle
                m1d = m1 + mtot+1
                m2d = m2 + mtot+1
 
                cterm = cterm + gam(il,iam1,in1)*gamtl(il,iam2,in2)
      1                         *dri(il,m1d,m2d,ilegp)
 
-   40       continue
+            end do
             if (eta(ileg) .ne. 0.0d0) then
                m1 = mlam(lam1)
                cterm = cterm * exp(-coni*eta(ileg)*m1)
@@ -2555,6 +2641,7 @@ c     speed of light in louck's units (rydbergs?)
       complex*16 psu,vu,dummy
       complex*16 vn,vmn
       integer*4 n1sum
+      logical converged
 
 c     test=1.e+04 value in loucks
       test=1.d+05
@@ -2582,7 +2669,7 @@ cv    p(1)=1.0
       p(1)=1.d-20
       q(1)=-e/(2.0d0*l+3.0d0)*r*p(1)
       beta=lp1
-      if (twoz.eq.0.0d0) go to 10
+      if (twoz.ne.0.0d0) then
       beta=sqrt(lp1*l+1.0d0-(twoz/c)**2)
       sb0=(beta-lp1)*csq/twoz
       sa1=(3.0d0*beta-(twoz/c)**2)/(2.0d0*beta+1.0d0)
@@ -2596,7 +2683,7 @@ cv    p(1)=1.0
       delta=r*csq/twoz
       q(1)=(sb0+delta*(sb1+delta*sb2))/
      >     (1.0d0+delta*(sa1+delta*sa2))*p(1)
-   10 continue
+      endif
 c     runge kutta method  (see loucks)
       c1=vn/r**2-e
       c2=1.0d0-c1/csq
@@ -2604,7 +2691,7 @@ c     runge kutta method  (see loucks)
       ps(1)=r*c2*q(1)+lp1*p(1)
       qs(1)=-lp1*q(1)+(r*c1-c3/r**3)*p(1)
       n=1
-   20 continue
+      do
       pc=p(n)
       qc=q(n)
       dp1=dx*(r*c2*qc+lp1*pc)
@@ -2640,9 +2727,11 @@ c     runge kutta method  (see loucks)
       qs(n)=-lp1*q(n)+(r*c1-c3/r**3)*p(n)
       vn=vnp1
       vmn=vmnp1
-      n1sum=n-nrk
-      if (n1sum) 20,30,30
-   30 if (n.ge.jri) go to 120
+      if (n-nrk .ge. 0) exit
+      end do
+   30 continue
+c     milne method (only if the muffin-tin radius not yet reached)
+      if (n .lt. jri) then
       psn=ps(nrk)
       qsn=qs(nrk)
       psnm1=ps(nrk-1)
@@ -2653,36 +2742,38 @@ c     runge kutta method  (see loucks)
       qsnm3=qs(nrk-3)
       psnm4=ps(nrk-4)
       qsnm4=qs(nrk-4)
-c     milne method
-   40 r=ri(n+1)
+      milne: do
+      r=ri(n+1)
       c1=v(n+1)/r/r-e
       c2=1.0d0-c1/csq
       c3=(vm(n+1)-2.0d0*v(n+1))/c2/c2*ldcsq
       pp=p(n-5)+a1*(psn+psnm4)+a2*(psnm1+psnm3)+a3*psnm2
       qp=q(n-5)+a1*(qsn+qsnm4)+a2*(qsnm1+qsnm3)+a3*qsnm2
       nit=0
-   50 psnp1=r*c2*qp+lp1*pp
+      corr: do
+      psnp1=r*c2*qp+lp1*pp
       qsnp1=-lp1*qp+(r*c1-c3/r**3)*pp
       pc=p(n-3)+a4*(psnp1+psnm3)+a5*(psn+psnm2)+a6*psnm1
       qc=q(n-3)+a4*(qsnp1+qsnm3)+a5*(qsn+qsnm2)+a6*qsnm1
-      if (abs(test*(pc-pp))-abs(pc)) 60,60,70
-   60 if (abs(test*(qc-qp))-abs(qc)) 110,110,70
-   70 n1sum=nit-40
-      if (n1sum) 100,80,100
-c  70 if (nit-5) 100,80,100 value in loucks
-   80 prel=(pc-pp)/pc
+      converged=.false.
+      if (abs(test*(pc-pp))-abs(pc) .le. 0.0d0) then
+      if (abs(test*(qc-qp))-abs(qc) .le. 0.0d0) converged=.true.
+      endif
+      if (converged) exit corr
+c     not converged (was label 70)
+      if (nit .eq. 40) then
+c     hard test fails: warn (via ihard) and accept anyway
+      prel=(pc-pp)/pc
       qrel=(qc-qp)/qc
-c     count times hard test fails
       ihard = ihard + 1
-c     print90, il,ie,n,prel,qrel
-   90 format (' hard test in fovrg il=',i2,' ie=',i1,' n=',i3,' prel='
-     1 ,e16.8,' qrel=',e16.8,' **********')
-      go to 110
-  100 nit=nit+1
+      exit corr
+      endif
+      nit=nit+1
       pp=pc
       qp=qc
-      go to 50
-  110 n=n+1
+      end do corr
+c     accept step (was label 110)
+      n=n+1
       p(n)=pc
       q(n)=qc
       ps(n)=psnp1
@@ -2698,7 +2789,7 @@ c     print90, il,ie,n,prel,qrel
       qsnm1=qsn
       qsn=qsnp1
 c     introduce scale factor to prevent overflow on vax jjr
-      if(abs(pc).lt.1.d+20) go to 119
+      if (abs(pc) .ge. 1.d+20) then
       scale=1.d-20
       do 112 mm=1,6
       nm=n-mm+1
@@ -2717,8 +2808,10 @@ c     introduce scale factor to prevent overflow on vax jjr
       qsnm2=scale*qsnm2
       qsnm1=scale*qsnm1
       qsn=scale*qsn
-  119 n1sum=n-jri
-      if (n1sum) 40,120,120
+      endif
+      if (n-jri .ge. 0) exit milne
+      end do milne
+      endif
   120 jm=jri-1
       x=dx*(xmt-jm)
       call intpol (zero,dx,p(jm),p(jri),ps(jm),ps(jri),x,pu,psu)
@@ -2781,21 +2874,23 @@ c     4*pi*density = rho.  Also need z of atom
 c     Then integrate out to the point where the integral of
 c     4*pi*density*r**2 is equal to iz
       sum = 0.0d0
-      do 10  i = 1, nrptx-1
+      inrm = 0
+      do  i = 1, nrptx-1
          fr = rho(i+1) * rr(i+1)**3
          fl = rho(i)   * rr(i)**3
          sumsav = sum
          sum = sum + 0.025d0*(fr+fl)
          if (sum .ge. iz)  then
             inrm = i+1
-            goto 20
+            exit
          endif
-   10 continue
+      end do
+      if (inrm .eq. 0)  then
       write(77,*) ' FRNRM Could not integrate enough charge to reach'
       write(77,*) '       required z.'
       write(77,*) "error sum,iz=",sum,iz
       stop 'FRNRM-1'
-   20 continue
+      endif
 c     inrm is too big, subtract one from irnm and interpolate
 c     to get correct value
       inrm = inrm - 1
@@ -3030,12 +3125,12 @@ c     While not done, read path, find feff.
       ntotal = 0
       nused = 0
       xportx = -1
-  200 continue
+      pathloop: do
 
 c        Read current path
          call rdpath (1, pola, done,xstar)
          icalc = iorder
-         if (done)  goto  1000
+         if (done)  exit pathloop
          npath = npath + 1
          ntotal = ntotal + 1
 
@@ -3084,7 +3179,7 @@ c           if ck is zero, xafs is undefined.  Make it zero and jump
 c           to end of calc part of loop.
             if (abs(ck(ie)) .le. eps)  then
                cchi(ie) = 0
-               goto 620
+               cycle
             endif
 
 c           Calculate and store spherical wave factors c_l^(m)z^m/m!
@@ -3317,7 +3412,7 @@ c           path unimportant, tell user
          endif
 
 c        Do next path
-         goto 200
+      end do pathloop
 
 c     Done with loop over paths
  1000 continue
@@ -3744,9 +3839,10 @@ c     Does not include line of dashes at the end.
   100 format(a55, t56, 2a12)
   102 format(t56, 2a12)
       do 120  ititle = 2, ntitle
-         if (ltitle(ititle).le.1)  goto 120
+         if (ltitle(ititle).gt.1)  then
          nhead = nhead+1
          write(head(nhead),110) title(ititle)(2:)
+         end if
   110    format(a79)
   120 continue
       if (ion(0) .ne. 0)  then
@@ -3832,16 +3928,18 @@ c     new element is at i, j = index of parent
 
       i = n
 
-   10 j = i/2
+      do
+      j = i/2
 c     if no parent, we're at the top of the heap, and done
       if (j .eq. 0)  return
       if (h(i) .lt. h(j))  then
          call swapfeff (h(i), h(j))
          call iswapfeff (ih(i), ih(j))
          i = j
-         goto 10
+      else
+         return
       endif
-      return
+      end do
       end
 
       subroutine hdown (h, ih, n)
@@ -3859,7 +3957,7 @@ c     children are j and k.
 
       i = 1
 
-   10 continue
+      do
       j = 2*i
       k = j + 1
 
@@ -3875,10 +3973,11 @@ c     j is now index of smallest of children
          call swapfeff (h(i), h(j))
          call iswapfeff (ih(i), ih(j))
          i = j
-         goto 10
+      else
+         return
       endif
 
-      return
+      end do
       end
 
       subroutine swapfeff (a, b)
@@ -4021,6 +4120,7 @@ c     logical unit from which to read input
       common /char2/ titre(30), ttl
 
       character*2  ttire(9)
+      logical doicut
       data ttire /'s ', 'p*', 'p ', 'd*', 'd ', 'f*', 'f ','g*', 'g '/
 
 c following variables fixed as data by jm 4/20/87
@@ -4102,7 +4202,7 @@ c     each orbital.
          if (iprint .ge. 5)  write(16,44) norb
          write(77,44) norb
    44    format (' norb=',i3,'too big')
-         goto 999
+         stop 'INDATA-1'
       endif
 
 c dexv = exchange coefficient for the potential: dexv=1. for slater
@@ -4129,16 +4229,20 @@ c        dval = atomic mass if nuc positive
             nuc=5
          else
             dval=dval*exp(4.0d0*dpas)
+            nuc=0
             do 170 i=6,np
                d1=dr1*exp((i-1)*dpas)
-               if (d1.ge.dval) goto 190
+               if (d1.ge.dval)  then
+                  nuc=i
+                  exit
+               endif
   170       continue
-            write(77,180)
-            if (iprint .ge. 5)  write(16,180)
-  180       format (' error for the atomic mass')
-            goto 999
-
-  190       nuc=i
+            if (nuc .eq. 0)  then
+               write(77,180)
+               if (iprint .ge. 5)  write(16,180)
+  180          format (' error for the atomic mass')
+               stop 'INDATA-1'
+            endif
             dr1=dr1*dval/d1
          endif
       endif
@@ -4193,13 +4297,14 @@ c        nel = occupation of the orbital
          l=2*iabs(nk(i))
 
 
-         if (nql(i).lt.nqn(i)  .and.  nel(i).le.l  .and.
-     1       nqn(i).gt.0       .and.  nql(i).le.4)   goto 340
+         if (.not.(nql(i).lt.nqn(i)  .and.  nel(i).le.l  .and.
+     1       nqn(i).gt.0       .and.  nql(i).le.4))   then
             write(77,330) den(i),nqn(i),nql(i),j,nel(i)
             if (iprint .ge. 5)  write(16,330) den(i),nqn(i),nql(i),
      1                                         j,nel(i)
   330       format (' error in the card    ',e15.8,i2,3i2)
-            goto 999
+            stop 'INDATA-1'
+         endif
   340    continue
          j=nql(i)+iabs(nk(i))
          titre(i)=ttire(j)
@@ -4210,11 +4315,12 @@ c        nel = occupation of the orbital
 
       if (iprint .ge. 5)  write(16,370) norbco
   370 format (' no. of core orbitals=',i3)
-      if (k.eq.(iz-ion)) goto 390
+      if (k.ne.(iz-ion))  then
          write(77,380)
          if (iprint .ge. 5)  write(16,380)
   380    format (' error for the number of electrons')
-         goto 999
+         stop 'INDATA-1'
+      endif
   390 continue
 
       if (iprat .eq. 0)  then
@@ -4225,11 +4331,9 @@ c        nel = occupation of the orbital
   430    format (1h0,'  wigner-seitz radius = ',0pf10.6,/)
       endif
 
-      if (nuc .eq. nuc1)  then
-         if (iz.eq.iz1.and.ion.eq.ion1) goto 600
-         if (iz.eq.iz1) goto 470
-      endif
+      if (.not.(nuc.eq.nuc1 .and. iz.eq.iz1 .and. ion.eq.ion1))  then
 
+      if (.not.(nuc.eq.nuc1 .and. iz.eq.iz1))  then
 c     dr(1)=dr1/z
 c     do 460 i=2,np
 c        dr(i)=dr(1)*exp((i-1)*dpas)
@@ -4240,10 +4344,12 @@ c     SIZ  December 1990
       do 461  i = 1, 251
          dr(i) = rr(i)
   461 continue
+      endif
 
 c starting potential
 
   470 val=-ion-1
+      doicut = .true.
 
 c     Following code is a block, block ends at line 600
       if (idep .eq. 1)  then
@@ -4268,7 +4374,7 @@ c        read in starting potential (in a.u. and negative) if idep=1
             write(77,510)
             if (iprint .ge. 5)  write(16,510)
   510       format (' error for idep')
-            goto 999
+            stop 'INDATA-1'
          endif
 
          if (iz.ne.iz1  .or .  ion.le.ion1  .or.   nuc.ne.nuc1)  then
@@ -4282,9 +4388,11 @@ c        read in starting potential (in a.u. and negative) if idep=1
      1                    z*((dr(i)/dr(nuc))**2-3.0)/(dr(nuc)+dr(nuc))
   530          continue
             endif
-            goto 600
+            doicut = .false.
          endif
       endif
+
+      if (doicut)  then
       if (icut .eq. 0)  then
          do 540 i=1,np
             if ((dr(i)*dv(i)).gt.val)  dv(i)=val/dr(i)
@@ -4296,7 +4404,10 @@ c        read in starting potential (in a.u. and negative) if idep=1
          write(77,550)
          if (iprint .ge. 5)  write(16,550)
   550    format (' error for the potential ')
-         goto 999
+         stop 'INDATA-1'
+      endif
+      endif
+
       endif
 
   600 continue
@@ -4311,7 +4422,7 @@ c     End of block above
                write(77,610)
                if (iprint .ge. 5)  write(16,610)
   610          format (' standard configuration')
-               goto 999
+               stop 'INDATA-1'
             endif
   620    continue
       endif
@@ -4374,33 +4485,37 @@ c **********************************************************************
       do 10 i=1,10
       dp(i)=0.0
    10 dq(i)=0.0
-      if (nuc) 20,20,60
-   20 dval=z/dvc
+      if (nuc .le. 0) then
+      dval=z/dvc
       deva1=-dval
       deva2=dv/dvc+dval/dr(1)-dd
       deva3=0.0
-      if (dk) 30,30,40
-   30 dbe=(dk-dfl)/dval
-      go to 50
-   40 dbe=dval/(dk+dfl)
-   50 dq(10)=dq1
+      if (dk .le. 0) then
+      dbe=(dk-dfl)/dval
+      else
+      dbe=dval/(dk+dfl)
+      end if
+      dq(10)=dq1
       dp(10)=dbe*dq1
-      go to 90
-   60 dval=dv+z*(3.0d0-dr(1)*dr(1)/(dr(nuc)*dr(nuc)))/(dr(nuc)+dr(nuc))
+      else
+      dval=dv+z*(3.0d0-dr(1)*dr(1)/(dr(nuc)*dr(nuc)))/(dr(nuc)+dr(nuc))
       deva1=0.0d0
       deva2=(dval-3.0d0*z/(dr(nuc)+dr(nuc)))/dvc-dd
       deva3=z/(dr(nuc)*dr(nuc)*dr(nuc)*dsal)
-      if (dk) 70,70,80
-   70 dp(10)=dq1
-      go to 90
-   80 dq(10)=dq1
-   90 do 100 i=1,5
+      if (dk .le. 0) then
+      dp(10)=dq1
+      else
+      dq(10)=dq1
+      end if
+      end if
+      do 100 i=1,5
       dp(i)=dp(10)
       dq(i)=dq(10)
       dep(i)=dp(i)*dfl
   100 deq(i)=dq(i)*dfl
       m=1
-  110 dm=m+dfl
+      do
+      dm=m+dfl
       dsum=dm*dm-dk*dk+deva1*deva1
       dqr=(dsal-deva2)*dq(m+9)-deva3*dq(m+7)
       dpr=deva2*dp(m+9)+deva3*dp(m+7)
@@ -4411,19 +4526,21 @@ c **********************************************************************
       dpr=dr(i)**m
       dqr=dsum*dpr
       dpr=dval*dpr
-      if (m.eq.1) go to 120
-  120 dp(i)=dp(i)+dpr
+      dp(i)=dp(i)+dpr
       dq(i)=dq(i)+dqr
       if (abs(dpr/dp(i)).le.test.and.abs(dqr/dq(i)).le.test) j=1
       dep(i)=dep(i)+dpr*dm
   130 deq(i)=deq(i)+dqr*dm
-      if (j.eq.1) go to 140
+      if (j.eq.1) exit
       dp(m+10)=dval
       dq(m+10)=dsum
       m=m+1
-      if (m.le.20) go to 110
+      if (m.gt.20) then
       nstop=45
-  140 do 150 i=1,4
+      exit
+      end if
+      end do
+      do 150 i=1,4
       dpno(i,jc)=dp(i+9)
   150 dqno(i,jc)=dq(i+9)
       return
@@ -4667,7 +4784,7 @@ c           Overlap explicitly defined by overlap card
                rnn  = rovr(iovr,iph)
                inph = iphovr(iovr,iph)
 c              Don't avg if norman spheres don't overlap
-               if (rnrm(iph)+rnrm(inph) .le. rnn)  goto 124
+               if (rnrm(iph)+rnrm(inph) .le. rnn)  cycle
                voltmp = calcvl (rnrm(iph), rnrm(inph), rnn)
                voltmp = voltmp + calcvl (rnrm(inph), rnrm(iph), rnn)
                rmttmp = rnn * folp(iph) * rnrm(iph) /
@@ -4679,11 +4796,11 @@ c              Don't avg if norman spheres don't overlap
          else
             iat = iatph(iph)
             do 130  inat = 1, nat
-               if (inat .eq. iat)  goto 130
+               if (inat .eq. iat)  cycle
                rnn = feff_dist(rat(1,inat), rat(1,iat))
                inph = iphat(inat)
 c              Don't avg if norman spheres don't overlap
-               if (rnrm(iph)+rnrm(inph) .lt. rnn)  goto 130
+               if (rnrm(iph)+rnrm(inph) .lt. rnn)  cycle
                voltmp = calcvl (rnrm(iph), rnrm(inph), rnn)
                voltmp = voltmp + calcvl (rnrm(inph), rnrm(iph), rnn)
                rmttmp = rnn * folp(iph) * rnrm(iph) /
@@ -4737,11 +4854,11 @@ c        Use all atoms
          call istval(vtot(1,iph), edens(1,iph), rmt(iph), imt(iph),
      2                rnrm(iph), inrm(iph), vintx, rhintx, ierr)
 c        if no contribution to interstitial region, skip this unique pot
-         if (ierr .ne. 0)  goto 170
+         if (ierr .ne. 0)  cycle
          call fermi (rhintx, vintx, xmu, rs, xf)
 c        (factor 4pi/3 cancel in numerator and denom, so leave out)
          volx = (rnrm(iph)**3 - rmt(iph)**3)
-         if (volx .le. 0)  goto 170
+         if (volx .le. 0)  cycle
          volint = volint + volx * xnatph(iph)
          vint   = vint   + vintx * volx * xnatph(iph)
          rhoint = rhoint + rhintx* volx * xnatph(iph)
@@ -5321,7 +5438,7 @@ c     in case when initial momemtum larger than final one.
                   m2 = m0-i
                   m1d = m1 + mtot+1
                   m2d = m2 + mtot+1
-                  if (abs(m1).gt.lx .or. abs(m2).gt.lx)  goto 34
+                  if (abs(m1).gt.lx .or. abs(m2).gt.lx)  cycle
                   mmati(mu1,mu2) = mmati(mu1,mu2) + 
      1              dri(il0,mu1d,m1d,nsc+2)*dri(il0,m2d,mu2d,nleg)
      2              *exp(-coni*(eta(nsc+2)*m2+eta(0)*m1))
@@ -5487,21 +5604,22 @@ c     calculate factors gam and gamtl
       ilx = il0
       do 30  il = iln, ilx
          tltl = 2*il - 1
-         do 20  lam = 1, lam1x
+         mloop: do  lam = 1, lam1x
             m = mlam(lam)
-            if (m .lt. 0)  goto 20
+            if (m .lt. 0)  cycle mloop
             im = m+1
-            if (im .gt. il)  goto 20
+            if (im .gt. il)  cycle mloop
             in = nlam(lam) + 1
             imn = in + m
-            if (lam .gt. lam1x)  goto 10
-            cam = xnlm(il,im) * (-1)**m
-            if (imn .le. il)  gam(il,im,in) = cam * clmi(il,imn,ileg)
-            if (imn .gt. il)  gam(il,im,in) = 0
-   10       if (lam .gt. lam1x) goto 20
+            if (lam .le. lam1x)  then
+               cam = xnlm(il,im) * (-1)**m
+               if (imn .le. il)  gam(il,im,in) = cam * clmi(il,imn,ileg)
+               if (imn .gt. il)  gam(il,im,in) = 0
+            endif
+            if (lam .gt. lam1x) cycle mloop
             camt = tltl / xnlm(il,im)
             gamtl(il,im,in) = camt * clmi(il,in,ilegp)
-   20    continue
+         end do mloop
    30 continue
 
       do 60 lam1 = 1,lam1x
@@ -5818,33 +5936,31 @@ c        z-axis in direction of polarization
   160 continue
 
       num = 1
-      if (.not. pola) then
-c        first nonzero z-coord. is already positive
-         goto 240
-      endif
-  200 continue
-      if (abs(zp1(num)) .gt. eps4) then
-         if (zp1(num) .lt. 0.0) then
-c           inverse all z-coordinates and zvec, if 
-c           first nonzero z-coordinate is negative 
-            do 210 j = 1, 3
-               zvec(j) = - zvec(j)
-  210       continue
-            do 220 j = 1, npat
-               zp1(j) = - zp1(j)
-  220       continue
+      if (pola) then
+c        make first nonzero z-coord positive
+         do
+         if (abs(zp1(num)) .gt. eps4) then
+            if (zp1(num) .lt. 0.0) then
+c              inverse all z-coordinates and zvec, if
+c              first nonzero z-coordinate is negative
+               do 210 j = 1, 3
+                  zvec(j) = - zvec(j)
+  210          continue
+               do 220 j = 1, npat
+                  zp1(j) = - zp1(j)
+  220          continue
+            endif
+            exit
          endif
-         goto 240
-      endif
-      num = num +1
-      if (num .lt. nleg) then
-         goto 200
+         num = num +1
+         if (num .ge. nleg) exit
+         end do
       endif
 c     here first nonzero z-coordinate is positive
   240 continue
 
       num = 1
-  300 continue
+      do
       ro2 = 0.0
       do 310 i =1, 3
          ro2 = ro2 + ri(i,num)*ri(i,num)
@@ -5873,12 +5989,11 @@ c           choose x-axis along incident beam
          yvec(1) = zvec(2)*xvec(3) - zvec(3)*xvec(2)
          yvec(2) = zvec(3)*xvec(1) - zvec(1)*xvec(3)
          yvec(3) = zvec(1)*xvec(2) - zvec(2)*xvec(1)
-         goto 390
+         exit
       endif
       num = num + 1
-      if (num .lt. nleg) then
-         goto 300
-      endif
+      if (num .ge. nleg) exit
+      end do
   390 continue
 
 c     calculate x,y coord for each atom in chosen frame of reference
@@ -5892,24 +6007,23 @@ c     calculate x,y coord for each atom in chosen frame of reference
 c        if no polarization or linear polarization then first nonzero
 c        x-coordinate is already positive, no need to check it.
          num = 1
-  500    continue
+         do
          if (abs(xp1(num)) .ge. eps4) then
             if (xp1(num) .lt. 0.0) then
                do 510 j = 1, npat
                   xp1(j) = - xp1(j)
   510          continue
             endif
-            goto 520
+            exit
          endif
          num = num + 1
-         if (num .lt. nleg) then
-            goto 500
-         endif
+         if (num .ge. nleg) exit
+         end do
   520    continue
       endif
 
       num = 1
-  570 continue
+      do
 c     inverse all y-coordinates if first nonzero y-coord is negative
       if (abs(yp1(num)) .ge. eps4) then
          if (yp1(num) .lt. 0.0) then
@@ -5917,12 +6031,11 @@ c     inverse all y-coordinates if first nonzero y-coord is negative
                yp1(j) = - yp1(j)
   580       continue
          endif
-         goto 590
+         exit
       endif
       num = num + 1
-      if (num .lt. nleg) then
-         goto 570
-      endif
+      if (num .ge. nleg) exit
+      end do
   590 continue
 
       do 595 j = 1, npat
@@ -6264,11 +6377,11 @@ c        12 au = 6.35 ang  This number pulled out of a hat...
 c        inat is Index of Neighboring ATom
          do 110  inat = 1, nat
 c           don't overlap atom with itself
-            if (inat .eq. iat)  goto 110
+            if (inat .eq. iat)  cycle
 
 c           if neighbor is too far away, don't overlap it
             rnn = feff_dist(rat(1,inat), rat(1,iat))
-            if (rnn .gt. rlapx)  goto 110
+            if (rnn .gt. rlapx)  cycle
 
             infr = ifrph(iphat(inat))
             call sumax (250, rnn, one, vcoul(1,infr), vclap(1,iph))
@@ -6397,7 +6510,7 @@ c     Input rmax is one-way distances
       nat = -1
 c     ratx is distance to most distant atom, used to check rmax
       ratx = 0
-   10 continue
+      do
          nat = nat+1
          if (nat .gt. natx)  then
             write(77,*) ' nat, natx ', nat, natx
@@ -6406,7 +6519,7 @@ c     ratx is distance to most distant atom, used to check rmax
          read(1,*,end=20)  idum, (rat(j,nat),j=1,3), ipot(nat), i1b(nat)
          rtmp = sdist(rat(1,nat),rat(1,0))
          if (rtmp .gt. ratx)  ratx = rtmp
-      goto 10
+      end do
    20 continue
       nat = nat-1
       close (unit=1)
@@ -6543,12 +6656,12 @@ c        interested in
 c     done if max number of paths we want have been found
 c     begin 'while not done' loop
       ok = .false.
-  800 continue
+      do
          if (r(1) .gt. rmax  .or.  np .ge. npx .or. n.le.0)  then
 c           n=0 means heap is empty
             if (n.le.0)  ok=.true.
 c           if (n.le.0)  print*, '   Heap empty'
-            goto 2000
+            exit
          endif
 
 c        save element at top of heap in arrays labeled 0
@@ -6580,7 +6693,7 @@ c           write status report to screen
 
          if (np .ge. npx)  then
             write(77,*) np, ' paths found.  (np .ge. npx)'
-            goto 2000
+            exit
          endif
 
 c        Make new path by replacing last atom in path from top of heap,
@@ -6640,7 +6753,7 @@ c        Do this only if it won't be too many bounces.
             ip = next
             if (ip .lt. 0)  then
 c              print*, '   Heap full'
-               goto 2000
+               exit
             endif
             next0 = npat(ip)
             do 200  i = 1, npat0
@@ -6673,7 +6786,7 @@ c              add it to the heap
             endif
          endif
 
-      goto 800
+      end do
  2000 continue
 c     end of 'while not done' loop
       if (.not. ok)  then
@@ -6842,14 +6955,21 @@ c     Prepare for first path.
 
 c     Begin next total path length range
       last = .false.
-  100 continue
+      outer: do
       ngs = ngs+1
       rcurr = r0
       np = 1
       do 110  i = 1,3
          iout(i,np) = iout0(i)
   110 continue
-  120 read(3,end=140)  r0, iout0
+c     accumulate one set of equal-length paths
+      do
+         read(3,iostat=iospd)  r0, iout0
+         if (iospd .ne. 0)  then
+c           end-of-file during read: this is the last set
+            last = .true.
+            exit
+         endif
          if (abs(r0-rcurr) .lt. eps3)  then
             np = np+1
             if (np .gt. np1x) then
@@ -6863,12 +6983,9 @@ c     Begin next total path length range
 c           r0 is the rtot for the next set
 c           iout0 is the packed atom list for the first path of the
 c           next set
-            goto 200
+            exit
          endif
-      goto 120
-  140 continue
-c     Get here only if end-of-file during read
-      last = .true.
+      end do
 
   200 continue
 
@@ -6899,14 +7016,14 @@ c     Find beginning and end of range with same hash key
 c     i0 is beginning of hash range, i1 is end of the range
 
       i0 = 1
-  300 continue
+      do
          i1 = np + 1
          dcurr = dhash(index(i0))
          do 310  ip = i0+1, np
             if (dhash(index(ip)) .ne. dcurr)  then
 c              end of a hash range
                i1 = ip
-               goto 311
+               exit
             endif
   310    continue
   311    continue
@@ -6936,22 +7053,22 @@ c           Check for hash collisons begins here.
             ldiff = .false.
             if (npat .ne. npat0)  then
                ldiff = .true.
-               goto 430
+               cycle
             endif
             do 320  iat = 1, npat
                if (ipot(ipat(iat)) .ne. ipot(ipat0(iat)))  then
                   ldiff = .true.
-                  goto 400
                endif
   320       continue
+            if (.not. ldiff)  then
             do 330  ileg = 1, npat
                if (abs(rx(ileg)-rx0(ileg)) .gt. eps3  .or.
      1             abs(ry(ileg)-ry0(ileg)) .gt. eps3  .or.
      2             abs(rz(ileg)-rz0(ileg)) .gt. eps3)  then
                   ldiff = .true.
-                  goto 400
                endif
   330       continue
+            endif
   400       continue
             if (ldiff)  then
               write(77,*) 'WARNING!!  Two non-degenerate paths hashed ',
@@ -7003,7 +7120,7 @@ c           mpprmd is double precision, used to get angles
 c           180.000 instead of 179.983, etc.
             call mpprmd (npat0, ipat0, rid, betad, etad)
 c           skip paths.dat if not necessary
-            if (ipr2 .eq. 5)  goto 576
+            if (ipr2 .ne. 5)  then
             write(1,500) nuptot, npat0+1, real(ndeg),
      1              rcurr/2
   500       format (1x, 2i5, f8.3,
@@ -7022,6 +7139,7 @@ c           skip paths.dat if not necessary
      1         potlbl(ipot(0)),
      1         rid(npat0+1), betad(npat0+1)*raddeg, etad(npat0+1)*raddeg
 c           End of paths.dat writing for this path
+            endif
 
 c           Write to crit.dat here (unit 4, opened above)
   576       continue
@@ -7050,14 +7168,16 @@ c           write out fraction error between xkeep and critpw
 
 c        And do next ihash range
          i0 = i1+1
-      if (i0 .le. np)  goto 300
+         if (i0 .gt. np)  exit
+      end do
 
 c     print 600,  ngs, rcurr, nupr
   600 format (1x, i5, f12.6, i7, ' igs, rcurr, nupr')
 c     write(80,601)  ngs, rcurr/2, nupr, nuprtt
   601 format (1x, i8, f12.6, 2i9)
 
-      if (.not. last) goto 100
+      if (last) exit outer
+      end do outer
 
       if (ipr2 .ne. 5)  close (unit=1)
 c     delete paths.bin when done...
@@ -7301,7 +7421,7 @@ c        p2 is (complex momentum)**2 referenced to energy dep xc
             ph(ie,il) = dcmplx (alph, beta)
 
 c           cut phaseshift calculation if they become too small
-            if (abs(ph(ie,il)) .lt. 1.0d-6)  goto 220
+            if (abs(ph(ie,il)) .lt. 1.0d-6)  exit
 
   210    continue
 
@@ -7912,8 +8032,9 @@ c **********************************************************************
       do 40 i=1,np
       dvn(i)=dv(i)/dr(i)
       dv(i)=dv(i)-(z+exchan(d(i),dr(i),dexv))
-      if (icut.ne.0) go to 40
+      if (icut.eq.0) then
       if (dv(i).gt.dlo) dv(i)=dlo
+      end if
    40 dv(i)=dv(i)/dr(i)
       return
       end
@@ -8130,7 +8251,7 @@ c     make sure that we have enough energy grid points to use all
 c     9 iecrits
       nncrit = 0
       do 290  ie = 1, necrit
-         if (iecrit(ie) .gt. ne)  goto 295
+         if (iecrit(ie) .gt. ne)  exit
          nncrit = ie
   290 continue
   295 continue
@@ -8259,16 +8380,17 @@ c     carriage control
       n = 0
       nheadx = nhead
       nhead = 0
-   10 read(io,20)  line
+      do
+      read(io,20)  line
    20    format(a)
-         if (line(4:11) .eq. '--------')  goto 100
+         if (line(4:11) .eq. '--------')  exit
          n = n+1
          if (n .le. nheadx)  then
             head(n) = line
             lhead(n) = istrln(head(n))
             nhead = n
          endif
-      goto 10
+      end do
   100 continue
       return
       end
@@ -8499,16 +8621,17 @@ c                2 reading overlap instructions for unique pot
 c                3 reading unique potential definitions
 
       mode = 0
-  200 read(1,10,iostat=ios)  line
+      readloop: do
+      read(1,10,iostat=ios)  line
          if (ios .lt. 0)  line='END'
          call triml (line)
-         if (iscomm(line))  goto 200
+         if (iscomm(line))  cycle readloop
          nwords = nwordx
          call bwords (line, nwords, words)
          itok = itoken (words(1))
 
 c        process the card using current mode
-  210    continue
+         dispatch: do
 
          if (mode .eq. 0)  then
             if (itok .eq. 1)  then
@@ -8744,7 +8867,7 @@ c              ISPORB  isporb
                mode = 0
             elseif (itok .eq. -1)  then
 c              END
-               goto 220
+               exit readloop
             else
                write(77,*) line(1:70)
                write(77,*) words(1)
@@ -8759,7 +8882,7 @@ c              END
 c              We're done reading atoms.
 c              Change mode and process current card.
                mode = 0
-               goto 210
+               cycle dispatch
             endif
             nat = nat+1
             if (nat .gt. natx)  then
@@ -8775,7 +8898,7 @@ c              Change mode and process current card.
 c              We're done reading these overlap instructions.
 c              Change mode and process current card.
                mode = 0
-               goto 210
+               cycle dispatch
             endif
             novr(iph) = novr(iph)+1
             iovr = novr(iph)
@@ -8791,7 +8914,7 @@ c              Change mode and process current card.
 c              We're done reading unique potential definitions
 c              Change mode and process current card.
                mode = 0
-               goto 210
+               cycle dispatch
             endif
             read(words(1),20,err=900)  iph
             if (iph .lt. 0  .or.  iph .gt. nphx)  then
@@ -8809,7 +8932,9 @@ c           Default set above is potlbl=' '
             write(77,*) 'Mode unrecognized, mode ', mode
             stop 'RDINP-6'
          endif
-      goto 200
+         exit dispatch
+         end do dispatch
+      end do readloop
   220 continue
 
 c     We're done reading the input file, close it.
@@ -8827,7 +8952,7 @@ c     Find out how many unique potentials we have
       do 300  iph = nphx, 0, -1
          if (izph(iph) .gt. 0)  then
             nph = iph
-            goto 301
+            exit
          endif
   300 continue
   301 continue
@@ -8843,7 +8968,7 @@ c        Use first atom in atom list that is of unique pot iph
          do 320  iat = 1, nat
             if (iph .eq. iphat(iat))  then
                iatph(iph) = iat
-               goto 321
+               exit
             endif
   320    continue
   321    continue
@@ -8881,7 +9006,7 @@ c     Do the free atom shuffling, do central atom as special case
          do 380  ifr = 1, nfr
             if (iz(ifr).eq.izph(iph) .and. ion(ifr).eq.ionph(iph)) then
                ifrph(iph) = ifr
-               goto 381
+               exit
             endif
   380    continue
   381    continue
@@ -8922,7 +9047,7 @@ c     if no atoms specified.)
          ratmin = 1.0d10
          do 412  iat = 1, nat
 c           skip absorbing atom
-            if (iat .eq. iatabs)  goto 412
+            if (iat .eq. iatabs)  cycle
             tmp = feff_dist(rat(1,iat), rat(1,iatabs))
             if (tmp .gt. ratmax)  ratmax = tmp
             if (tmp .lt. ratmin)  ratmin = tmp
@@ -9092,7 +9217,7 @@ c     Atoms for the pathfinder
             stop 'RDINP'
          endif
 c        if user doesn't want geom.dat, don't do it
-         if (nogeom)  goto 792
+         if (.not. nogeom)  then
          open (unit=1, file=trim(header)//'geom.dat',
      >         status='unknown', iostat=ios)
          call chopen (ios, trim(header)//'geom.dat', 'rdinp')
@@ -9106,12 +9231,13 @@ c        Central atom first
          write(1,780)  ii, (rat(j,iatabs)*bohr,j=1,3), 0, 1
 c        Rest of the atoms (skip central atom)
          do 790   iat = 1, nat
-            if (iat .eq. iatabs)  goto 790
+            if (iat .eq. iatabs)  cycle
             ii = ii+1
             write(1,780)  ii, (rat(j,iat)*bohr,j=1,3), iphat(iat), 1
   780       format (i4, 3f12.6, 2i4)
   790    continue
          close (unit=1)
+         endif
       endif
   792 continue
 
@@ -9371,7 +9497,8 @@ c     global polarization data
       if (nleg .gt. legtot)  then
          write(77,*) 'nleg .gt. legtot, nleg, legtot ', nleg, legtot
          write(77,*) 'ERROR'
-         goto 200
+         done = .true.
+         return
       endif
 c     skip label (x y z ipot rleg beta eta)
       read(in,*)
@@ -9386,7 +9513,8 @@ c        convert to code units
             write(77,*) 'ipot(ileg) too big, ipot, ileg, npot ',
      1               ipot(ileg), ileg, npot
             write(77,*) 'ERROR'
-            goto 200
+            done = .true.
+            return
          endif
    20 continue
       nsc = nleg-1
@@ -9623,9 +9751,7 @@ c     in cphase
       jr1=jri
       ddjr1=ddjri-jr1+1.0
 
-      if (jri-2*(jri/2).ne.0) go to 20
-         jri=jri+1
-   20 continue
+      if (jri-2*(jri/2).eq.0) jri=jri+1
 
       ddjri=ddjri-jri+1.0
 c  ddjri = (log(ws)-dri)/dpas
@@ -9638,10 +9764,11 @@ c  dri  =  log(dr(jri))
 
       do 50 i=jri,np
          dl=dr(i)
-         if (i.eq.jri.or.i.eq.np) go to 40
+         if (.not.(i.eq.jri.or.i.eq.np)) then
             dl=dl+dl
             if ((i-2*(i/2)).eq.0) dl=dl+dl
-   40    dd=d(i)*dl
+         endif
+         dd=d(i)*dl
          da=da+dd
    50 continue
 
@@ -9658,10 +9785,11 @@ c  dri  =  log(dr(jri))
 
       do 80 i=jri,np
          dl=1.0
-         if (i.eq.jri.or.i.eq.np) go to 70
+         if (.not.(i.eq.jri.or.i.eq.np)) then
             dl=dl+dl
             if ((i-2*(i/2)).eq.0) dl=dl+dl
-   70    dd=d(i)*dl
+         endif
+         dd=d(i)*dl
          db=db+dd
    80 continue
 
@@ -9679,22 +9807,22 @@ c  dri  =  log(dr(jri))
 
       du=da*3.0/(ws**3)
 
-      do 120 i=1,np
+      do i=1,np
          if (i.gt.jr1+1) then
             srho(i)=0.0
-            go to 100
-         endif
+         else
             d(i)=d(i)+du*dr(i)**2
             srho(i)=d(i)
-  100    continue
+         endif
          dumm=-exchan(d(i),dr(i),dexv)/dr(i)
          dvf(i)=dumm
-         if (i.gt.jr1) go to 110
-            dvn(i)=dvn(i)-z/dr(i)+da*(1.50/ws-.50*dr(i)**2/ws**3)-db
-            go to 120
-  110    continue
+         if (i.gt.jr1) then
             dvn(i)=0.0
-  120 dv(i)=dvn(i)+dumm
+         else
+            dvn(i)=dvn(i)-z/dr(i)+da*(1.50/ws-.50*dr(i)**2/ws**3)-db
+         endif
+         dv(i)=dvn(i)+dumm
+      end do
 
 c ad1 write the mt index and radius
       if (iprint .ge. 5)  write(16,55)jr1,dr(jr1)
@@ -10129,7 +10257,7 @@ c     These header lines do not include carriage control
             lmax(ie,iph) = 0
 c           Set lmax to include only non-zero phases
             do 60  il = 1, lmax0+1
-               if (abs(ph(ie,il,iph)) .lt. phmin)  goto 61
+               if (abs(ph(ie,il,iph)) .lt. phmin)  exit
                lmax(ie,iph) = il-1
    60       continue
    61       continue
@@ -10591,28 +10719,29 @@ c     Use ...0 for making indices, then sort into arrays with no
 c     trailing 0 so laml0x is minimimized. (note: this is a crude
 c     n**2 sort -- can 'improve' to nlog_2(n) if necessary)
       lam = 0
-      do 20 in = 1, nmax+1
+      nloop: do in = 1, nmax+1
          n = in - 1
-         do 20  im = 1, mmax+1
+         mloop: do  im = 1, mmax+1
             m = im-1
             jord = 2*n+m
-            if (jord .gt. iord)  goto 20
+            if (jord .gt. iord)  cycle mloop
             if (lam .ge. lamtot)  then
                write(77,*) 'Lambda array filled, some order lost'
-               goto 21
+               exit nloop
             endif
             lam = lam+1
             mlam0(lam) = -m
             nlam0(lam) = n
-            if (m .eq. 0)  goto 20
+            if (m .eq. 0)  cycle mloop
             if (lam .ge. lamtot)  then
                write(77,*) 'Lambda array filled, some order lost'
-               goto 21
+               exit nloop
             endif
             lam = lam+1
             mlam0(lam) = m
             nlam0(lam) = n
-   20 continue
+         end do mloop
+      end do nloop
    21 continue
       lamx=lam
 c     lamx must be less than lamtot
@@ -10666,7 +10795,7 @@ CDIR$ OPTIMIZE (-O 0)
 
 c     Set imax (last non-zero rholap data)
       do 220  i = 1, npts
-         if (rholap(i) .le. 1.0d-5)  goto 230
+         if (rholap(i) .le. 1.0d-5)  exit
          imax = i
   220 continue
   230 continue
@@ -10925,11 +11054,15 @@ c     so nmax=10 implies an error of 1.e-6
       del=1.0d0
       bn=(fn(zero)+fn(one))/2.0d0
       bo=bn
- 10   continue
+      do
 c     nth iteration
 c     b_n+1=(b_n)/2+deln*sum_0^2**n f([2n-1]deln)
       n=n+1
-      if(n.gt.nmax) go to 40
+      if(n.gt.nmax) then
+c     not converged
+      write(77,50) n,itn, b,eps
+      return
+      end if
       del=del/2.0d0
       sum=0.0d0
       do 20 i=1, itn
@@ -10943,19 +11076,14 @@ c     neville table - remaining errors were
 c     found too small to justify the added code
       b=(4*bnp1-bn)/3.0d0
       eps=abs((b-bo)/b)
-      if(eps.lt.tol) goto 60
+c     converged
+      if(eps.lt.tol) return
       bn=bnp1
       bo=b
       itn=itn*2
-      goto 10
- 40   write(77,50) n,itn, b,eps
+      end do
  50   format(' not converged, n,itn,b,eps=',
      1  2i4,2e14.6)
-      return
- 60   continue
-c     print70, n, itn, b, eps
-c70   format(' n,itn,b,eps=' 2i4,2e16.8)
-      return
       end
       subroutine snlm (lmaxp1, mmaxp1)
 #ifdef CRAYFORTRAN
@@ -11050,22 +11178,25 @@ c **********************************************************************
       d1=da+mm
       da=0.0d0
       db=0.0d0
-      do 70 i=1,np
+      do i=1,np
       dl=dr(i)**mm
-      if (i.eq.1.or.i.eq.np) go to 10
-      dl=dl+dl
-      if ((i-2*(i/2)).eq.0) dl=dl+dl
-   10 dc=dp(i)*dl
-      if (dc) 20,40,30
-   20 db=db+dc
-      go to 40
-   30 da=da+dc
-   40 dc=dq(i)*dl
-      if (dc) 50,70,60
-   50 db=db+dc
-      go to 70
-   60 da=da+dc
-   70 continue
+      if (.not.(i.eq.1.or.i.eq.np)) then
+         dl=dl+dl
+         if ((i-2*(i/2)).eq.0) dl=dl+dl
+      end if
+      dc=dp(i)*dl
+      if (dc .lt. 0.0d0) then
+         db=db+dc
+      else if (dc .gt. 0.0d0) then
+         da=da+dc
+      end if
+      dc=dq(i)*dl
+      if (dc .lt. 0.0d0) then
+         db=db+dc
+      else if (dc .gt. 0.0d0) then
+         da=da+dc
+      end if
+      end do
       da=dpas*(da+db)/3.0d0
       dc=exp(dpas)-1.0d0
       db=d1*(d1+1.0d0)*dc*exp((d1-1.0d0)*dpas)
@@ -11101,8 +11232,8 @@ c     H1: initialize
       l = n/2 + 1
       ir = n
 
-c     H2: Decrease l or ir
-   20 continue
+c     H2..H8: build/sift the heap (was Knuth goto labels 20..80)
+      do
       if (l .gt. 1)  then
          l = l-1
          irr = index(l)
@@ -11117,32 +11248,23 @@ c     H2: Decrease l or ir
             return
          endif
       endif
-
-c     H3: Prepare for sift-up
       j = l
-
-c     H4: Advance downward
-   40 continue
-      i = j
-      j = 2 * j
-      if (j .eq. ir)  goto 60
-      if (j .gt. ir)  goto 80
-
-c     H5: Find larger son of i
-      if (r(index(j)) .lt. r(index(j+1)))  j = j+1
-
-c     H6: Son larger than rr?
-   60 continue
-      if (rr .ge. r(index(j)))  goto 80
-
-c     H7: Move son up
-      index(i) = index(j)
-      goto 40
-
-c     H8: Store rr in it's proper place
-   80 continue
+      do
+         i = j
+         j = 2 * j
+         if (j .lt. ir)  then
+            if (r(index(j)) .lt. r(index(j+1)))  j = j+1
+         endif
+         if (j .le. ir)  then
+            if (rr .lt. r(index(j)))  then
+               index(i) = index(j)
+               cycle
+            endif
+         endif
+         exit
+      end do
       index(i) = irr
-      goto 20
+      end do
 
       end
       subroutine sortii (n, index, k)
@@ -11244,8 +11366,8 @@ c     H1: initialize
       l = n/2 + 1
       ir = n
 
-c     H2: Decrease l or ir
-   20 continue
+c     H2..H8: build/sift the heap (was Knuth goto labels 20..80)
+      do
       if (l .gt. 1)  then
          l = l-1
          irr = index(l)
@@ -11260,32 +11382,23 @@ c     H2: Decrease l or ir
             return
          endif
       endif
-
-c     H3: Prepare for sift-up
       j = l
-
-c     H4: Advance downward
-   40 continue
-      i = j
-      j = 2 * j
-      if (j .eq. ir)  goto 60
-      if (j .gt. ir)  goto 80
-
-c     H5: Find larger son of i
-      if (r(index(j)) .lt. r(index(j+1)))  j = j+1
-
-c     H6: Son larger than rr?
-   60 continue
-      if (rr .ge. r(index(j)))  goto 80
-
-c     H7: Move son up
-      index(i) = index(j)
-      goto 40
-
-c     H8: Store rr in it's proper place
-   80 continue
+      do
+         i = j
+         j = 2 * j
+         if (j .lt. ir)  then
+            if (r(index(j)) .lt. r(index(j+1)))  j = j+1
+         endif
+         if (j .le. ir)  then
+            if (rr .lt. r(index(j)))  then
+               index(i) = index(j)
+               cycle
+            endif
+         endif
+         exit
+      end do
       index(i) = irr
-      goto 20
+      end do
 
       end
 C FUNCTION ISTRLN (STRING)  Returns index of last non-blank
@@ -11303,7 +11416,7 @@ C  -- If null string or blank string, return length zero.
 C  -- Find rightmost non-blank character.
       ILEN = LEN (STRING)
       DO 20  I = ILEN, 1, -1
-         IF (STRING (I:I) .NE. ' ')  GOTO 30
+         IF (STRING (I:I) .NE. ' ')  EXIT
    20 CONTINUE
    30 ISTRLN = I
 
@@ -11325,7 +11438,7 @@ C  -- All blank and null strings are special cases.
 
 C  -- FInd first non-blank char
       DO 10  I = 1, JLEN
-         IF (STRING (I:I) .NE. ' ')  GOTO 20
+         IF (STRING (I:I) .NE. ' ')  EXIT
    10 CONTINUE
    20 CONTINUE
 
@@ -11486,6 +11599,7 @@ CDIR$ OPTIMIZE (-O 0)
       parameter (nptx=250)
       dimension aa2(nptx), aasum(nptx)
       dimension stor(nptx)
+      logical skipmid
 
 c     jjchi     index beyond which aa2 is zero
 c     jtop      index just below distance to neighbor
@@ -11498,55 +11612,57 @@ c     Wigner-Seitz radius is set to 15 in ATOM.
 
       topx = xx(jjchi)
 
-      do 120  i = 1, jtop
+      do  i = 1, jtop
          x = xx(i)
          xint = 0.0d0
          et = exp(x)
          blx = log(rn-et)
-         if (blx .ge. topx)  goto 119
-         jbl = 2.0d0+20.0d0*(blx+8.8d0)
-         if (jbl .lt. 1)  jbl=1
-         if (jbl .ge. 2)  then
-c           use linear interp to make end cap near center of neighbor
-            xjbl = jbl
-            xbl = 0.05d0 * (xjbl-1.0d0) - 8.8d0
-            g = xbl-blx
-            xint =xint+0.5d0*g*(aa2(jbl)*(2.0d0-20.0d0*g)*exp(2.0d0*xbl)
-     1             +20.0d0*g*aa2(jbl-1)*exp(2.0d0*(xbl-0.05d0)))
-         endif
-         tlx = log(rn+et)
-         if (tlx .ge. topx)  then
-            jtl = jjchi
-            go to 90
-         endif
-         jtl = 1.0d0 + 20.0d0*(tlx+8.8d0)
-         if (jtl .lt. jbl)  then
-c           handle peculiar special case at center of atom 1
-            fzn = aa2(jtl)*exp(2.0d0*(xbl-0.05d0))
-            fz3 = aa2(jbl)*exp(2.0d0*xbl)
-            fz2 = fzn+20.0d0*(fz3-fzn)*(tlx-xbl+0.05d0)
-            fz1 = fzn+20.0d0*(fz3-fzn)*(blx-xbl+0.05d0)
-            xint = 0.5d0*(fz1+fz2)*(tlx-blx)
-            go to 119
-         endif
-         xjtl = jtl
-         xtl = 0.05d0*(xjtl-1.0d0)-8.8d0
-         c = tlx-xtl
-         xint = xint+0.5d0*c*(aa2(jtl)*(2.0d0-20.0d0*c)
-     1         *exp(2.0d0*xtl)+aa2(jtl+1)*20.0d0*c
-     2         *exp(2.0d0*(xtl+0.05d0)))
-
-   90    if (jtl .gt. jbl)  then
-  100       xint = xint+0.5d0*(aa2(jbl)*exp(2.0d0*xbl)+aa2(jbl+1)
-     1             *exp(2.0d0*(xbl+0.05d0)))*0.05d0
-            jbl = jbl+1
-            if (jbl .lt. jtl) then
+         if (blx .lt. topx)  then
+            jbl = 2.0d0+20.0d0*(blx+8.8d0)
+            if (jbl .lt. 1)  jbl=1
+            if (jbl .ge. 2)  then
+c              use linear interp to make end cap near center of neighbor
+               xjbl = jbl
+               xbl = 0.05d0 * (xjbl-1.0d0) - 8.8d0
+               g = xbl-blx
+               xint =xint+0.5d0*g*(aa2(jbl)*(2.0d0-20.0d0*g)*exp(2.0d0
+     1                *xbl)+20.0d0*g*aa2(jbl-1)*exp(2.0d0*(xbl-0.05d0)))
+            endif
+            tlx = log(rn+et)
+            skipmid = .false.
+            if (tlx .ge. topx)  then
+               jtl = jjchi
+            else
+               jtl = 1.0d0 + 20.0d0*(tlx+8.8d0)
+               if (jtl .lt. jbl)  then
+c                 handle peculiar special case at center of atom 1
+                  fzn = aa2(jtl)*exp(2.0d0*(xbl-0.05d0))
+                  fz3 = aa2(jbl)*exp(2.0d0*xbl)
+                  fz2 = fzn+20.0d0*(fz3-fzn)*(tlx-xbl+0.05d0)
+                  fz1 = fzn+20.0d0*(fz3-fzn)*(blx-xbl+0.05d0)
+                  xint = 0.5d0*(fz1+fz2)*(tlx-blx)
+                  skipmid = .true.
+               else
+                  xjtl = jtl
+                  xtl = 0.05d0*(xjtl-1.0d0)-8.8d0
+                  c = tlx-xtl
+                  xint = xint+0.5d0*c*(aa2(jtl)*(2.0d0-20.0d0*c)
+     1                  *exp(2.0d0*xtl)+aa2(jtl+1)*20.0d0*c
+     2                  *exp(2.0d0*(xtl+0.05d0)))
+               endif
+            endif
+            if (.not. skipmid .and. jtl .gt. jbl)  then
+               do
+               xint = xint+0.5d0*(aa2(jbl)*exp(2.0d0*xbl)+aa2(jbl+1)
+     1            *exp(2.0d0*(xbl+0.05d0)))*0.05d0
+               jbl = jbl+1
+               if (jbl .ge. jtl)  exit
                xbl = xbl+0.05d0
-               go to 100
+               end do
             endif
          endif
-  119    stor(i) = 0.5d0*xint*ann/(rn*et)
-  120 continue
+         stor(i) = 0.5d0*xint*ann/(rn*et)
+      end do
 
       do 190  i = 1, jtop
          aasum(i) = aasum(i) + stor(i)
@@ -11595,15 +11711,14 @@ c     n            x >= xx(n)
       locat = 0
       u = n+1
 
-   10 if (u-locat .gt. 1)  then
+      do while (u-locat .gt. 1)
          m = (u + locat) / 2
          if (x .lt. xx(m))  then
             u = m
          else
             locat = m
          endif
-         goto 10
-      endif
+      end do
 
       return
       end
@@ -11723,10 +11838,11 @@ CDIR$ OPTIMIZE (-O 0)
       dc(1)=1.0d0
       do 10 i=1,np
    10 dp(i)=d(i)/dr(i)
-      if (nuc.le.0) go to 30
+      if (nuc.gt.0) then
       do 20 i=1,nuc
    20 dp(i)=d(i)*(3.0d0-dr(i)*dr(i)/(dr(nuc)*dr(nuc)))/(dr(nuc)+dr(nuc))
       dc(1)=4.0d0
+      end if
    30 call somm (dr,dp,dq,dpas,dc(1),0,np)
       dc(1)=-z*dc(1)
       do 40 i=1,np
@@ -12190,7 +12306,7 @@ CDIR$ OPTIMIZE (-O 0)
       dpyk=dpas/24.0d0
       id=min0(nmax(ia)+2,nmax(ib)+2,np)
       idm1=id-1
-      if (nag.ne.0) go to 30
+      if (nag.eq.0) then
       do 10 i=1,id
    10 dq(i)=dr(i)*(dgc(i,ia)*dgc(i,ib)+dpc(i,ia)*dpc(i,ib))
       do 20 i=1,4
@@ -12198,13 +12314,14 @@ CDIR$ OPTIMIZE (-O 0)
       do 20 j=1,i
    20 dpn1(i)=dpn1(i)+dpno(j,ia)*dpno(i+1-j,ib)+dqno(j,ia)*dqno(i+1-j,ib
      1 )
-      go to 60
-   30 do 40 i=1,id
+      else
+      do 40 i=1,id
    40 dq(i)=dr(i)*dgc(i,ia)*dpc(i,ib)
       do 50 i=1,4
       dpn1(i)=0.0d0
       do 50 j=1,i
    50 dpn1(i)=dpn1(i)+dpno(j,ia)*dqno(i+1-j,ib)
+      end if
    60 di=dfl(ia)+dfl(ib)+nk1
       dp(1)=0.0d0
       dp(2)=0.0d0
@@ -12229,10 +12346,11 @@ CDIR$ OPTIMIZE (-O 0)
       di=i*di
       dip1=i*dip1*dpah
       i=id-3
-  100 dq(i)=dq(i+1)*dm+dim2*dp(i+2)+dip1*dp(i-1)+dim1*dp(i+1)+di*dp(i)
+      do
+      dq(i)=dq(i+1)*dm+dim2*dp(i+2)+dip1*dp(i-1)+dim1*dp(i+1)+di*dp(i)
       i=i-1
-      n1sum=i-1
-      if (n1sum) 110,110,100
+      if (i-1 .le. 0) exit
+      end do
   110 dq(1)=dq(3)*dm*dm+8.0d0*((di*dp(1)
      >  +4.0d0*dim1*dp(2))/13.0d0-dim2*dp(3))
       return
