@@ -81,7 +81,7 @@ then
 fi
 if test "x$GA_BRANCH" = x 
 then
-USE_GA_RELEASE=1
+USE_GA_RELEASE=
 fi
 if test "x$USE_GA_RELEASE" != x
 then
@@ -129,6 +129,7 @@ then
 	fi
     fi
 fi
+DEV_GA=1
 #oldelse #USE_GA_RELEASE
 if test "x$USE_GA_RELEASE" = x
 then
@@ -136,8 +137,8 @@ if test "x$DEV_GA" != x
 then
 #DEV_GA=1 gives the current "best" dev branch, not develop
 #to get develop, set GA_BRANCH-develop
-    GA_DIR=ga-develop
-    GA_BRANCH=develop
+    GA_DIR=5.9.2-DPU
+    GA_BRANCH=Ben/DPU-Offload
 else
     if test "x$GA_BRANCH" != x
     then
@@ -155,7 +156,7 @@ if test "x$GA_URL" != x
 then
     echo "Using GA_URL" $GA_URL
 else
-GA_URL="https://github.com/GlobalArrays/ga.git"
+GA_URL="https://github.com/BTMichalowicz/ga.git"
 fi
 GA_GIT="$GA_URL  -b $GA_BRANCH"
 echo "Using GA_GIT" $GA_GIT "and GA_DIR" $GA_DIR

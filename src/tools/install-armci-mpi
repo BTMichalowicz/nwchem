@@ -34,7 +34,7 @@ fi
 
 ARMCI_MPI_DIR=${NWCHEM_TOP}/src/tools/armci-mpi
 
-BRANCH=request-based-rma
+BRANCH=Ben/DPU-Offload
 
 if [ -d ${ARMCI_MPI_DIR} ] ; then
   # Assume that it is the right one, created previously by this script.
@@ -42,7 +42,7 @@ if [ -d ${ARMCI_MPI_DIR} ] ; then
   cd ${ARMCI_MPI_DIR} && git checkout $BRANCH && git pull >& git.log
   echo "Step 1 of 4 succeeded."
 elif [ -x "$(command -v git)" ] ; then
-  git clone -b $BRANCH https://github.com/jeffhammond/armci-mpi.git ${ARMCI_MPI_DIR} >& git.log
+  git clone -b $BRANCH https://github.com/btmichalowicz/armci-oshmem-idea.git ${ARMCI_MPI_DIR} >& git.log
   stat=$?
   if [ $stat -ne 0 ] ; then
     echo "git clone failed"
