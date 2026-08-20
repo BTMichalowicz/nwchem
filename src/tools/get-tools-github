@@ -137,8 +137,8 @@ if test "x$DEV_GA" != x
 then
 #DEV_GA=1 gives the current "best" dev branch, not develop
 #to get develop, set GA_BRANCH-develop
-    GA_DIR=5.9.2-DPU
-    GA_BRANCH=Ben/DPU-Offload
+    GA_DIR=5.8.2-DPU
+    GA_BRANCH=Ben/DPU-2
 else
     if test "x$GA_BRANCH" != x
     then
@@ -148,7 +148,7 @@ else
 	    GA_DIR=`echo $GA_DIR0 | sed -e 's/\//_/g'`
 	fi
     else
-        GA_BRANCH=5.9.2
+        GA_BRANCH=5.8.2
         GA_DIR=ga-${GA_BRANCH}
     fi
 fi
