@@ -119,6 +119,7 @@
       endif
   999 format(2x,'Recompile w/ USE_OPENMP=1 to use threads in CCSD(T)')
 #endif
+      call ga_activate_offload()
       tzero=util_wallsec()
       flopzero=perfm_flop()
 #ifdef USE_F90_ALLOCATABLE
@@ -435,6 +436,7 @@
             end do
          end do
       end do
+      call ga_deactivate_offload()
       call ga_sync()
       next=nxtask(-nodes, 1)
       t_flops=util_wallsec()-tzero
