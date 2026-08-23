@@ -77,7 +77,7 @@ CONFIG=$NWCHEM_TOP/src/config/makefile.h
 DEV_GA=1
 if test "x$DEV_GA" != x
 then
-    GA_BRANCH=5.9.2
+    GA_BRANCH=5.8.2
     GA_DIR=ga-${GA_BRANCH}
 fi
 if test "x$GA_BRANCH" = x 
@@ -88,7 +88,7 @@ if test "x$USE_GA_RELEASE" != x
 then
     if test "x$GA_RELEASE_NO" = x
     then
-	GA_RELEASE_NO=5.9.2
+	GA_RELEASE_NO=5.8.2
     fi
     GA_DIR=ga-"$GA_RELEASE_NO"
     if [ ! -f ga-"$GA_RELEASE_NO".tar.gz ]; then
@@ -166,6 +166,8 @@ if [ $ga_version == 1 ] ; then
   echo $GA_DIR
   exit 0
 fi
+
+GA_DIR=5.8.2
 
 if [ ${#TOOLGIT} -eq 0 ] ; then
   echo "No Git found!"
