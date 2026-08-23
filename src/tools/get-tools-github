@@ -74,20 +74,21 @@ done
 TOOLDIR=`pwd`
 TOOLGIT=`which git`
 CONFIG=$NWCHEM_TOP/src/config/makefile.h
+DEV_GA=1
 if test "x$DEV_GA" != x
 then
-    GA_BRANCH=5.9.2
+    GA_BRANCH=5.8.2
     GA_DIR=ga-${GA_BRANCH}
 fi
 if test "x$GA_BRANCH" = x 
 then
-USE_GA_RELEASE=1
+USE_GA_RELEASE=
 fi
 if test "x$USE_GA_RELEASE" != x
 then
     if test "x$GA_RELEASE_NO" = x
     then
-	GA_RELEASE_NO=5.9.2
+	GA_RELEASE_NO=5.8.2
     fi
     GA_DIR=ga-"$GA_RELEASE_NO"
     if [ ! -f ga-"$GA_RELEASE_NO".tar.gz ]; then
@@ -129,6 +130,7 @@ then
 	fi
     fi
 fi
+DEV_GA=1
 #oldelse #USE_GA_RELEASE
 if test "x$USE_GA_RELEASE" = x
 then
@@ -136,8 +138,8 @@ if test "x$DEV_GA" != x
 then
 #DEV_GA=1 gives the current "best" dev branch, not develop
 #to get develop, set GA_BRANCH-develop
-    GA_DIR=ga-develop
-    GA_BRANCH=develop
+    GA_DIR=ga-5.8.2
+    GA_BRANCH=Ben/DPU-2
 else
     if test "x$GA_BRANCH" != x
     then
@@ -147,7 +149,7 @@ else
 	    GA_DIR=`echo $GA_DIR0 | sed -e 's/\//_/g'`
 	fi
     else
-        GA_BRANCH=5.9.2
+        GA_BRANCH=5.8.2
         GA_DIR=ga-${GA_BRANCH}
     fi
 fi
@@ -155,7 +157,7 @@ if test "x$GA_URL" != x
 then
     echo "Using GA_URL" $GA_URL
 else
-GA_URL="https://github.com/GlobalArrays/ga.git"
+GA_URL="https://github.com/BTMichalowicz/ga.git"
 fi
 GA_GIT="$GA_URL  -b $GA_BRANCH"
 echo "Using GA_GIT" $GA_GIT "and GA_DIR" $GA_DIR
@@ -164,6 +166,8 @@ if [ $ga_version == 1 ] ; then
   echo $GA_DIR
   exit 0
 fi
+
+GA_DIR=ga-5.8.2
 
 if [ ${#TOOLGIT} -eq 0 ] ; then
   echo "No Git found!"
@@ -222,7 +226,7 @@ then
 else
         echo "configure missing. running autogen.sh"
         echo $GA_DIR/configure $GA_DIR/autogen.sh
-        cd  $GA_DIR;sh ./autogen.sh
+        cd  $GA_DIR; sh ./autogen.sh
 fi
 exit 0
 
