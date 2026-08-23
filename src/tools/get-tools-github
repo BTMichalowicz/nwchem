@@ -167,7 +167,7 @@ if [ $ga_version == 1 ] ; then
   exit 0
 fi
 
-GA_DIR=5.8.2
+GA_DIR=ga-5.8.2
 
 if [ ${#TOOLGIT} -eq 0 ] ; then
   echo "No Git found!"
