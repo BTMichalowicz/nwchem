@@ -139,7 +139,7 @@ then
 #DEV_GA=1 gives the current "best" dev branch, not develop
 #to get develop, set GA_BRANCH-develop
     GA_DIR=ga-5.8.2
-    GA_BRANCH=Ben/DPU-2
+    GA_BRANCH=hotfix/5.8.2
 else
     if test "x$GA_BRANCH" != x
     then
