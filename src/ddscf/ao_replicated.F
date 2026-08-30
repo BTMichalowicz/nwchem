@@ -232,9 +232,9 @@ c
 c     
       end if
 c     
-      call ga_sync()
+c      call ga_sync()
       call ga_dgop(374, dbl_mb(k_fock), nbf*nbf*nfock, '+')
-      call ga_sync()
+c      call ga_sync()
 c     
 c     Process 0 PUTs stuff into the global fock matrix
 c
