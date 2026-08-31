@@ -176,9 +176,9 @@ c
          call scf_dens_reorder(nfock, nbf,
      $        dbl_mb(k_fock), dbl_mb(k_dens))
       end if
-      call ga_sync()
+c      call ga_sync()
       call ga_brdcst(373, dbl_mb(k_dens), mdtob(nbf*nbf*nfock), 0)
-      call ga_sync()
+c      call ga_sync()
       call dfill(nbf*nbf*nfock, 0.0d0, dbl_mb(k_fock), 1)
 c     
       if (util_print('semi_direct',print_debug) .and.
